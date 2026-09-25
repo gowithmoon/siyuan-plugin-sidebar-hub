@@ -1,6 +1,7 @@
 .idea
 .vscode
 .DS_Store
+.env.local
 package-lock.json
 *.tsbuildinfo
 .svelte-check/

@@ -56,6 +56,25 @@ The `legacy-svelte4` tag is retained as a stable reference for existing users an
    Use `SIYUAN_PLUGIN_DIR` to bind `dev` to a specific workspace instead of selecting a workspace by index.
 6. Open the marketplace in SiYuan and enable the plugin in the download tab.
 
+### Quick deployment to a local workspace
+
+Use one command to build and deploy the production plugin for manual verification in SiYuan:
+
+```bash
+cp .env.example .env.local
+# Edit .env.local and set SIYUAN_PLUGINS_DIR to the absolute workspace data/plugins path
+pnpm run release
+```
+
+For example, when the workspace is `/home/user/SiYuan`, configure:
+
+```dotenv
+SIYUAN_PLUGINS_DIR=/home/user/SiYuan/data/plugins
+```
+
+`pnpm run release` creates the production build and copies the contents of `dist/` to
+`<SIYUAN_PLUGINS_DIR>/siyuan-plugin-sidebar-hub/`. A system environment variable with the same name takes precedence over `.env.local`, which is useful for temporarily deploying to another workspace. `.env.local` is ignored by Git; do not commit personal workspace paths.
+
 ### Setting the Target Directory for the make-link Command
 
 The `make-link` command creates a symbolic link that binds your `dev` directory to the SiYuan plugin directory. You can configure the target SiYuan workspace and create the symbolic link in three ways:

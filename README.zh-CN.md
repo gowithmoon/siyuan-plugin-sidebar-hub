@@ -53,6 +53,25 @@
    可以通过 `SIYUAN_PLUGIN_DIR` 指定插件链接目录，避免按序号选择错误工作空间。
 6.  在思源中打开集市并在下载选项卡中启用插件
 
+### 快速部署到本地工作空间
+
+需要在思源中人工验证生产构建时，可以使用一次命令完成构建和部署：
+
+```bash
+cp .env.example .env.local
+# 编辑 .env.local，将 SIYUAN_PLUGINS_DIR 设置为工作空间的 data/plugins 绝对路径
+pnpm run release
+```
+
+例如，工作空间位于 `/home/user/SiYuan` 时，应配置：
+
+```dotenv
+SIYUAN_PLUGINS_DIR=/home/user/SiYuan/data/plugins
+```
+
+`pnpm run release` 会先生成生产构建，再将 `dist/` 中的插件文件复制到
+`<SIYUAN_PLUGINS_DIR>/siyuan-plugin-sidebar-hub/`。同名系统环境变量的优先级高于 `.env.local`，可用于临时部署到另一个工作空间。`.env.local` 已被 Git 忽略，不要提交个人工作空间路径。
+
 
 ### 设置 make-link 命令的目标目录
 
