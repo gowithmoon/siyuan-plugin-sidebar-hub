@@ -70,16 +70,19 @@
     <section class="sidebar-hub__calendar" aria-label={translations.title}>
         <div class="sidebar-hub__calendar-header">
             <strong>{calendar.year} / {String(calendar.month + 1).padStart(2, "0")}</strong>
-            <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south" aria-label={translations.previousMonth} onclick={() => moveMonth(-1)}>
-                <svg aria-hidden="true"><use href="#iconLeft"></use></svg>
-            </button>
-            <button type="button" class="sidebar-hub__today" aria-label={translations.today} onclick={returnToToday}>
-                <svg aria-hidden="true"><use href="#iconHome"></use></svg>
-                <span>{translations.today}</span>
-            </button>
-            <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south" aria-label={translations.nextMonth} onclick={() => moveMonth(1)}>
-                <svg aria-hidden="true"><use href="#iconRight"></use></svg>
-            </button>
+            <div class="sidebar-hub__calendar-navigation">
+                <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south" aria-label={translations.previousMonth} onclick={() => moveMonth(-1)}>
+                    <svg aria-hidden="true"><use href="#iconLeft"></use></svg>
+                </button>
+                <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south" aria-label={translations.today} onclick={returnToToday}>
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 3 3 10v11h7v-7h4v7h7V10L12 3Z"></path>
+                    </svg>
+                </button>
+                <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south" aria-label={translations.nextMonth} onclick={() => moveMonth(1)}>
+                    <svg aria-hidden="true"><use href="#iconRight"></use></svg>
+                </button>
+            </div>
         </div>
 
         <div class="sidebar-hub__weekdays" aria-hidden="true">
