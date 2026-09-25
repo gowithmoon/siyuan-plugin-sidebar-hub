@@ -54,7 +54,7 @@ describe("书签导航", () => {
     it("加载后保留分组和组内文档、块书签", async () => {
         const source = createBookmarkSource({ load: vi.fn().mockResolvedValue(groups), open: vi.fn() });
 
-        await expect(source.query(input)).resolves.toEqual([
+        await expect(source.query(input)).resolves.toMatchObject({ status: "ready", sections: [
             {
                 key: "参考",
                 label: "参考",
@@ -68,24 +68,24 @@ describe("书签导航", () => {
                 label: "常用",
                 entries: [{ key: "20260923100000-ccccccc", label: "产品路线图", icon: "iconBookmark" }],
             },
-        ]);
+        ] });
     });
 
     it("搜索同时匹配分组名称和条目内容，清空后恢复完整列表", async () => {
         const source = createBookmarkSource({ load: vi.fn().mockResolvedValue(groups), open: vi.fn() });
 
-        expect((await source.query({ ...input, query: "参考" }))[0].entries).toHaveLength(2);
-        expect(await source.query({ ...input, query: "路线" })).toMatchObject([
+        expect((await source.query({ ...input, query: "参考" })).sections[0].entries).toHaveLength(2);
+        expect((await source.query({ ...input, query: "路线" })).sections).toMatchObject([
             { key: "常用", entries: [{ label: "产品路线图" }] },
         ]);
-        expect(await source.query({ ...input, query: "不存在" })).toEqual([]);
-        expect(await source.query(input)).toHaveLength(2);
+        expect((await source.query({ ...input, query: "不存在" })).sections).toEqual([]);
+        expect((await source.query(input)).sections).toHaveLength(2);
     });
 
     it("支持名称、创建时间和修改时间升降序", async () => {
         const source = createBookmarkSource({ load: vi.fn().mockResolvedValue(groups), open: vi.fn() });
         const labels = async (field: "name" | "created" | "updated", direction: "asc" | "desc") =>
-            (await source.query({ query: "参考", sort: { field, direction } }))[0].entries.map((entry) => entry.label);
+            (await source.query({ query: "参考", sort: { field, direction } })).sections[0].entries.map((entry) => entry.label);
 
         await expect(labels("name", "desc")).resolves.toEqual(["插件开发记录", "API 索引"]);
         await expect(labels("created", "asc")).resolves.toEqual(["插件开发记录", "API 索引"]);
@@ -112,8 +112,8 @@ describe("书签导航", () => {
         const second = source.query({ ...input, query: "API" });
         resolveLoad!(groups);
 
-        await expect(first).resolves.toHaveLength(1);
-        await expect(second).resolves.toHaveLength(1);
+        await Promise.all([first, second]);
+        expect(source.snapshot).toMatchObject({ status: "ready", sections: [{ entries: [{ label: "API 索引" }] }] });
         expect(load).toHaveBeenCalledTimes(1);
     });
 });

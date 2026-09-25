@@ -41,13 +41,14 @@ describe("条目来源契约：书签", () => {
         const sort = { field: "name", direction: "asc" } as const;
 
         expect(source.sortFields).toEqual(["name", "created", "updated"]);
-        await expect(source.query({ query: "路线", sort })).resolves.toMatchObject([
-            { label: "常用", entries: [{ label: "产品路线图" }] },
-        ]);
+        await expect(source.query({ query: "路线", sort })).resolves.toMatchObject({
+            status: "ready",
+            sections: [{ label: "常用", entries: [{ label: "产品路线图" }] }],
+        });
         const all = await source.query({ query: "", sort });
-        expect(all).toHaveLength(2);
+        expect(all.sections).toHaveLength(2);
 
-        await source.open(all[0].entries[0].key);
+        await source.open(all.sections[0].entries[0].key);
         expect(open).toHaveBeenCalledWith("20260925100000-aaaaaaa");
     });
 
@@ -59,10 +60,10 @@ describe("条目来源契约：书签", () => {
         const source = createBookmarkSource({ load, open: vi.fn() });
         const input = { query: "", sort: { field: "name", direction: "asc" } } as const;
 
-        await expect(source.query(input)).rejects.toThrow("暂时不可用");
-        await expect(source.query(input)).resolves.toHaveLength(2);
+        await expect(source.query(input)).resolves.toMatchObject({ status: "error", error: "暂时不可用" });
+        await expect(source.query(input)).resolves.toMatchObject({ status: "ready", sections: [{}, {}] });
         source.invalidate();
-        await expect(source.query(input)).resolves.toHaveLength(1);
+        await expect(source.query(input)).resolves.toMatchObject({ status: "ready", sections: [{}] });
         expect(load).toHaveBeenCalledTimes(3);
     });
 });
@@ -74,10 +75,11 @@ describe("条目来源契约：标签", () => {
         const sort = { field: "name", direction: "asc" } as const;
 
         expect(source.sortFields).toEqual(["name", "count"]);
-        await expect(source.query({ query: "项目", sort })).resolves.toMatchObject([
-            { entries: [{ label: "项目" }] },
-        ]);
-        expect(await source.query({ query: "", sort })).toHaveLength(1);
+        await expect(source.query({ query: "项目", sort })).resolves.toMatchObject({
+            status: "ready",
+            sections: [{ entries: [{ label: "项目" }] }],
+        });
+        expect((await source.query({ query: "", sort })).sections).toHaveLength(1);
 
         await source.open("项目");
         expect(open).toHaveBeenCalledWith("项目");
@@ -91,10 +93,10 @@ describe("条目来源契约：标签", () => {
         const source = createTagSource({ load, open: vi.fn() });
         const input = { query: "", sort: { field: "name", direction: "asc" } } as const;
 
-        await expect(source.query(input)).rejects.toThrow("暂时不可用");
-        await expect(source.query(input)).resolves.toHaveLength(1);
+        await expect(source.query(input)).resolves.toMatchObject({ status: "error", error: "暂时不可用" });
+        await expect(source.query(input)).resolves.toMatchObject({ status: "ready", sections: [{}] });
         source.invalidate();
-        await expect(source.query(input)).resolves.toEqual([]);
+        await expect(source.query(input)).resolves.toMatchObject({ status: "ready", sections: [] });
     });
 });
 
@@ -110,7 +112,7 @@ describe("条目来源隔离", () => {
         });
         const input = { query: "", sort: { field: "name", direction: "asc" } } as const;
 
-        await expect(bookmarks.query(input)).rejects.toThrow("书签不可用");
-        await expect(tagSource.query(input)).resolves.toHaveLength(1);
+        await expect(bookmarks.query(input)).resolves.toMatchObject({ status: "error", error: "书签不可用" });
+        await expect(tagSource.query(input)).resolves.toMatchObject({ status: "ready", sections: [{}] });
     });
 });

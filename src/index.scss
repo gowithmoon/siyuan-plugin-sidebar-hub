@@ -151,6 +151,13 @@
     overflow: auto;
 }
 
+.sidebar-hub__source-panel {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+}
+
 .sidebar-hub__tools {
     display: grid;
     grid-template-columns: minmax(0, 1fr) repeat(3, 30px);

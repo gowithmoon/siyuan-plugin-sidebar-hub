@@ -35,7 +35,9 @@ describe("标签导航", () => {
         const source = createTagSource({ load: vi.fn().mockResolvedValue(tags), open: vi.fn() });
 
         expect(source.sortFields).toEqual(TAG_SORT_FIELDS);
-        await expect(source.query(input)).resolves.toEqual([
+        await expect(source.query(input)).resolves.toMatchObject({
+            status: "ready",
+            sections: [
             {
                 key: "tags",
                 entries: [
@@ -44,21 +46,22 @@ describe("标签导航", () => {
                     { key: "项目/开发", label: "项目/开发", icon: "iconTag" },
                 ],
             },
-        ]);
+            ],
+        });
     });
 
     it("搜索名称并支持引用数量升降序，清空后恢复完整列表", async () => {
         const source = createTagSource({ load: vi.fn().mockResolvedValue(tags), open: vi.fn() });
 
-        expect(await source.query({ ...input, query: "开发" })).toMatchObject([
+        expect((await source.query({ ...input, query: "开发" })).sections).toMatchObject([
             { entries: [{ key: "项目/开发", label: "项目/开发" }] },
         ]);
-        expect((await source.query({ query: "", sort: { field: "count", direction: "desc" } }))[0].entries.map((entry) => entry.label))
+        expect((await source.query({ query: "", sort: { field: "count", direction: "desc" } })).sections[0].entries.map((entry) => entry.label))
             .toEqual(["项目/开发", "阅读", "项目"]);
-        expect((await source.query({ query: "", sort: { field: "count", direction: "asc" } }))[0].entries.map((entry) => entry.label))
+        expect((await source.query({ query: "", sort: { field: "count", direction: "asc" } })).sections[0].entries.map((entry) => entry.label))
             .toEqual(["项目", "阅读", "项目/开发"]);
-        expect(await source.query({ ...input, query: "不存在" })).toEqual([]);
-        expect(await source.query(input)).toHaveLength(1);
+        expect((await source.query({ ...input, query: "不存在" })).sections).toEqual([]);
+        expect((await source.query(input)).sections).toHaveLength(1);
     });
 
     it("打开标签时把原生搜索关键词交给适配器", async () => {

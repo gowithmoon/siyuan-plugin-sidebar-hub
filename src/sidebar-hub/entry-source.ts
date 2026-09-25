@@ -24,9 +24,16 @@ export interface EntrySourceSection {
 
 export interface EntrySource<TField extends string> {
     readonly sortFields: readonly TField[];
-    query(input: EntrySourceQuery<TField>): Promise<EntrySourceSection[]>;
+    readonly snapshot: EntrySourceSnapshot;
+    query(input: EntrySourceQuery<TField>): Promise<EntrySourceSnapshot>;
     open(key: string): Promise<void> | void;
     invalidate(): void;
+}
+
+export interface EntrySourceSnapshot {
+    status: "idle" | "loading" | "ready" | "error";
+    sections: EntrySourceSection[];
+    error?: string;
 }
 
 interface EntrySourceDependencies<TRaw, TField extends string> {
@@ -42,6 +49,8 @@ export function createEntrySource<TRaw, TField extends string>(
     let cached: TRaw | undefined;
     let pending: Promise<TRaw> | undefined;
     let generation = 0;
+    let queryVersion = 0;
+    let currentSnapshot: EntrySourceSnapshot = { status: "idle", sections: [] };
 
     async function load() {
         if (cached !== undefined) {
@@ -65,8 +74,29 @@ export function createEntrySource<TRaw, TField extends string>(
 
     return {
         sortFields: dependencies.sortFields,
+        get snapshot() {
+            return currentSnapshot;
+        },
         async query(input) {
-            return dependencies.build(await load(), input);
+            const requestVersion = ++queryVersion;
+            currentSnapshot = { status: "loading", sections: currentSnapshot.sections };
+            try {
+                const sections = dependencies.build(await load(), input);
+                if (requestVersion !== queryVersion) {
+                    return currentSnapshot;
+                }
+                currentSnapshot = { status: "ready", sections };
+            } catch (error) {
+                if (requestVersion !== queryVersion) {
+                    return currentSnapshot;
+                }
+                currentSnapshot = {
+                    status: "error",
+                    sections: [],
+                    error: error instanceof Error && error.message ? error.message : "Unable to load entries",
+                };
+            }
+            return currentSnapshot;
         },
         open(key) {
             return dependencies.open(key);
@@ -75,6 +105,8 @@ export function createEntrySource<TRaw, TField extends string>(
             generation += 1;
             cached = undefined;
             pending = undefined;
+            queryVersion += 1;
+            currentSnapshot = { status: "idle", sections: [] };
         },
     };
 }
