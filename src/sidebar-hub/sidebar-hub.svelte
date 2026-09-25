@@ -1,0 +1,131 @@
+<script lang="ts">
+    import { TAB_DEFINITIONS, type SidebarHubPreferences, type SidebarTabId } from "./preferences";
+    import { buildCalendarMonth } from "./calendar";
+
+    interface Translations {
+        title: string;
+        today: string;
+        previousMonth: string;
+        nextMonth: string;
+        minimize: string;
+        contentPending: string;
+        tabs: Record<SidebarTabId, string>;
+    }
+
+    interface Props {
+        preferences: SidebarHubPreferences;
+        translations: Translations;
+        instanceId: string;
+        onActiveTabChange: (tabId: SidebarTabId) => void;
+    }
+
+    let { preferences: initialPreferences, translations, instanceId, onActiveTabChange }: Props = $props();
+    const today = new Date();
+    let preferences = $state<SidebarHubPreferences>();
+    let visibleYear = $state(today.getFullYear());
+    let visibleMonth = $state(today.getMonth());
+    let selectedDate = $state("");
+    let calendar = $derived(buildCalendarMonth(visibleYear, visibleMonth, today));
+    let visibleTabs = $derived(TAB_DEFINITIONS.filter((tab) => preferences.visibleTabs[tab.id]));
+
+    initializePreferences();
+
+    function initializePreferences() {
+        preferences = initialPreferences;
+    }
+
+    export function updatePreferences(nextPreferences: SidebarHubPreferences) {
+        preferences = nextPreferences;
+    }
+
+    function moveMonth(offset: number) {
+        const nextMonth = new Date(visibleYear, visibleMonth + offset, 1);
+        visibleYear = nextMonth.getFullYear();
+        visibleMonth = nextMonth.getMonth();
+    }
+
+    function returnToToday() {
+        visibleYear = today.getFullYear();
+        visibleMonth = today.getMonth();
+        selectedDate = calendar.days.find((day) => day.isToday)?.date ?? "";
+    }
+
+    function selectDate(date: string) {
+        selectedDate = date;
+    }
+</script>
+
+<div class="sidebar-hub fn__flex-column">
+    <div class="block__icons">
+        <div class="block__logo">
+            <svg class="block__logoicon" aria-hidden="true"><use href="#iconCalendar"></use></svg>
+            {translations.title}
+        </div>
+        <span class="fn__flex-1 fn__space"></span>
+        <button type="button" data-type="min" class="block__icon ariaLabel" data-position="north" aria-label={translations.minimize}>
+            <svg aria-hidden="true"><use href="#iconMin"></use></svg>
+        </button>
+    </div>
+
+    <section class="sidebar-hub__calendar" aria-label={translations.title}>
+        <div class="sidebar-hub__calendar-header">
+            <strong>{calendar.year} / {String(calendar.month + 1).padStart(2, "0")}</strong>
+            <button type="button" class="block__icon ariaLabel" data-position="south" aria-label={translations.previousMonth} onclick={() => moveMonth(-1)}>
+                <svg aria-hidden="true"><use href="#iconLeft"></use></svg>
+            </button>
+            <button type="button" class="sidebar-hub__today" aria-label={translations.today} onclick={returnToToday}>
+                <svg aria-hidden="true"><use href="#iconHome"></use></svg>
+                <span>{translations.today}</span>
+            </button>
+            <button type="button" class="block__icon ariaLabel" data-position="south" aria-label={translations.nextMonth} onclick={() => moveMonth(1)}>
+                <svg aria-hidden="true"><use href="#iconRight"></use></svg>
+            </button>
+        </div>
+
+        <div class="sidebar-hub__weekdays" aria-hidden="true">
+            {#each ["一", "二", "三", "四", "五", "六", "日"] as weekday}
+                <span>{weekday}</span>
+            {/each}
+        </div>
+        <div class="sidebar-hub__days">
+            {#each calendar.days as day (day.date)}
+                <button
+                    type="button"
+                    class:sidebar-hub__day--outside={!day.isCurrentMonth}
+                    class:sidebar-hub__day--today={day.isToday}
+                    class:sidebar-hub__day--selected={selectedDate === day.date}
+                    class="sidebar-hub__day"
+                    aria-label={day.date}
+                    aria-pressed={selectedDate === day.date}
+                    tabindex={day.isCurrentMonth ? 0 : -1}
+                    onclick={() => selectDate(day.date)}
+                >
+                    {day.day}
+                </button>
+            {/each}
+        </div>
+    </section>
+
+    <div class="sidebar-hub__tabs" role="tablist" aria-label={translations.title}>
+        {#each visibleTabs as tab (tab.id)}
+            <button
+                type="button"
+                id={`${instanceId}-tab-${tab.id}`}
+                class:sidebar-hub__tab--active={preferences.activeTab === tab.id}
+                class="sidebar-hub__tab"
+                role="tab"
+                aria-selected={preferences.activeTab === tab.id}
+                aria-controls={`${instanceId}-panel`}
+                tabindex={preferences.activeTab === tab.id ? 0 : -1}
+                onclick={() => onActiveTabChange(tab.id)}
+            >
+                {translations.tabs[tab.id]}
+            </button>
+        {/each}
+    </div>
+
+    <div id={`${instanceId}-panel`} class="sidebar-hub__content fn__flex-1" role="tabpanel" aria-labelledby={`${instanceId}-tab-${preferences.activeTab}`}>
+        <svg aria-hidden="true"><use href={`#${TAB_DEFINITIONS.find((tab) => tab.id === preferences.activeTab)!.icon}`}></use></svg>
+        <p>{translations.contentPending}</p>
+    </div>
+</div>
