@@ -1,14 +1,26 @@
 <script lang="ts">
-    import { type App } from "siyuan";
+    import { showMessage, type App } from "siyuan";
 
     import { TAB_DEFINITIONS, type SidebarHubPreferences, type SidebarTabId } from "./preferences";
-    import { buildCalendarMonth } from "./calendar";
+    import { buildCalendarMonth, toDateKey } from "./calendar";
     import { createBookmarkSource } from "./bookmarks";
     import { loadBookmarkGroups, openBookmark } from "./bookmark-siyuan";
     import { createTagSource } from "./tags";
     import { loadTags, openTag } from "./tag-siyuan";
     import { createDatabaseSource } from "./databases";
     import { loadDatabases, openDatabase } from "./database-siyuan";
+    import { createPageSource } from "./pages";
+    import { loadPageBlockAttrs, loadPageDocuments, loadPageNotebooks, openPage } from "./page-siyuan";
+    import { createDailyNoteNavigator, DailyNoteNavigationError } from "./daily-notes";
+    import {
+        confirmDailyNoteCreation,
+        createTodayDailyNote,
+        loadDailyNoteBlockAttrs,
+        loadDailyNoteDocuments,
+        loadDailyNotebookConfig,
+        loadDailyNotebooks,
+        openDailyNote,
+    } from "./daily-note-siyuan";
     import EntrySourcePanel from "./entry-source-panel.svelte";
 
     interface PanelTranslations {
@@ -23,6 +35,7 @@
         noMatches: string;
         loadError: string;
         openError: string;
+        progress?: string;
         sortOptions: Record<string, string>;
     }
 
@@ -32,11 +45,18 @@
         previousMonth: string;
         nextMonth: string;
         minimize: string;
-        contentPending: string;
+        createDailyNoteTitle: string;
+        createDailyNoteMessage: string;
+        dailyNotebookRequired: string;
+        dailyNotebookClosed: string;
+        dateCreationUnsupported: string;
+        dailyNoteLoadError: string;
+        dailyNoteOpenError: string;
         tabs: Record<SidebarTabId, string>;
         bookmarks: PanelTranslations & { groupLabel: string };
         tags: PanelTranslations;
         databases: PanelTranslations;
+        pages: PanelTranslations & { progress: string };
     }
 
     interface Props {
@@ -61,20 +81,53 @@
         load: loadDatabases,
         open: (blockId) => openDatabase(app, blockId),
     });
+    const pageSource = createPageSource({
+        listNotebooks: loadPageNotebooks,
+        listDocuments: loadPageDocuments,
+        getBlockAttrs: loadPageBlockAttrs,
+        open: (documentId) => openPage(app, documentId),
+    });
     let preferences = $state<SidebarHubPreferences>();
     let visibleYear = $state(today.getFullYear());
     let visibleMonth = $state(today.getMonth());
     let selectedDate = $state("");
+    let dailyNoteDates = $state<Record<string, string>>({});
+    let openingDate = $state(false);
+    let monthRequest = 0;
     let calendar = $derived(buildCalendarMonth(visibleYear, visibleMonth, today));
     let visibleTabs = $derived(TAB_DEFINITIONS.filter((tab) => preferences.visibleTabs[tab.id]));
+    const dailyNoteNavigator = createDailyNoteNavigator({
+        selectedNotebookId: () => preferences.dailyNotebookId,
+        listNotebooks: loadDailyNotebooks,
+        getNotebookConfig: loadDailyNotebookConfig,
+        listDocuments: loadDailyNoteDocuments,
+        getBlockAttrs: loadDailyNoteBlockAttrs,
+        confirmCreate: (date) => confirmDailyNoteCreation(
+            translations.createDailyNoteTitle,
+            translations.createDailyNoteMessage.replace("{date}", date),
+        ),
+        createToday: createTodayDailyNote,
+        open: (documentId) => openDailyNote(app, documentId),
+        today: () => toDateKey(today),
+    });
 
     initializePreferences();
+
+    $effect(() => {
+        const year = visibleYear;
+        const month = visibleMonth;
+        const notebookId = preferences.dailyNotebookId;
+        void loadCalendarMonth(year, month, notebookId);
+    });
 
     function initializePreferences() {
         preferences = initialPreferences;
     }
 
     export function updatePreferences(nextPreferences: SidebarHubPreferences) {
+        if (preferences.dailyNotebookId !== nextPreferences.dailyNotebookId) {
+            dailyNoteNavigator.invalidate();
+        }
         preferences = nextPreferences;
     }
 
@@ -87,11 +140,63 @@
     function returnToToday() {
         visibleYear = today.getFullYear();
         visibleMonth = today.getMonth();
-        selectedDate = calendar.days.find((day) => day.isToday)?.date ?? "";
+        void openCalendarDate(toDateKey(today));
     }
 
     function selectDate(date: string) {
+        void openCalendarDate(date);
+    }
+
+    async function loadCalendarMonth(year: number, month: number, notebookId: string) {
+        const requestId = ++monthRequest;
+        if (!notebookId) {
+            dailyNoteDates = {};
+            return;
+        }
+        try {
+            const result = await dailyNoteNavigator.loadMonth(year, month);
+            if (requestId === monthRequest) {
+                dailyNoteDates = result.dates;
+            }
+        } catch (error) {
+            if (requestId === monthRequest) {
+                dailyNoteDates = {};
+                if (!(error instanceof DailyNoteNavigationError)) {
+                    showMessage(translations.dailyNoteLoadError, 6000, "error");
+                }
+            }
+        }
+    }
+
+    async function openCalendarDate(date: string) {
+        if (openingDate) {
+            return;
+        }
         selectedDate = date;
+        openingDate = true;
+        try {
+            const result = await dailyNoteNavigator.openDate(date);
+            if (result === "created") {
+                dailyNoteDates = { ...dailyNoteDates, [date]: "created" };
+            }
+        } catch (error) {
+            showMessage(dailyNoteErrorMessage(error), 6000, "error");
+        } finally {
+            openingDate = false;
+        }
+    }
+
+    function dailyNoteErrorMessage(error: unknown) {
+        if (error instanceof DailyNoteNavigationError) {
+            if (error.code === "notebook-unconfigured") {
+                return translations.dailyNotebookRequired;
+            }
+            if (error.code === "notebook-closed") {
+                return translations.dailyNotebookClosed;
+            }
+            return translations.dateCreationUnsupported;
+        }
+        return translations.dailyNoteOpenError;
     }
 </script>
 
@@ -137,10 +242,12 @@
                     class:sidebar-hub__day--outside={!day.isCurrentMonth}
                     class:sidebar-hub__day--today={day.isToday}
                     class:sidebar-hub__day--selected={selectedDate === day.date}
+                    class:sidebar-hub__day--has-note={Boolean(dailyNoteDates[day.date])}
                     class="sidebar-hub__day"
                     aria-label={day.date}
                     aria-pressed={selectedDate === day.date}
                     tabindex={day.isCurrentMonth ? 0 : -1}
+                    disabled={openingDate}
                     onclick={() => selectDate(day.date)}
                 >
                     {day.day}
@@ -197,11 +304,15 @@
                 active={preferences.activeTab === "databases"}
             />
         </div>
-        {#if preferences.activeTab === "pages"}
-            <div class="sidebar-hub__state">
-                <svg aria-hidden="true"><use href={`#${TAB_DEFINITIONS.find((tab) => tab.id === preferences.activeTab)!.icon}`}></use></svg>
-                <p>{translations.contentPending}</p>
-            </div>
-        {/if}
+        <div class:fn__none={preferences.activeTab !== "pages"} class="sidebar-hub__source-panel">
+            <EntrySourcePanel
+                source={pageSource}
+                translations={translations.pages}
+                emptyIcon="iconFile"
+                sectionLabel={translations.tabs.pages}
+                showSectionLabels={false}
+                active={preferences.activeTab === "pages"}
+            />
+        </div>
     </div>
 </div>

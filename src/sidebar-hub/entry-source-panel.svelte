@@ -20,6 +20,7 @@
         noMatches: string;
         loadError: string;
         openError: string;
+        progress?: string;
         sortOptions: Record<string, string>;
     }
 
@@ -59,10 +60,10 @@
             source.invalidate();
         }
         snapshot = source.snapshot;
-        const result = source.query({
-            query,
-            sort: { field: sortField, direction: sortDirection },
-        });
+        const result = source.query(
+            { query, sort: { field: sortField, direction: sortDirection } },
+            (nextSnapshot) => snapshot = nextSnapshot,
+        );
         snapshot = source.snapshot;
         snapshot = await result;
     }
@@ -120,6 +121,10 @@
             showMessage(translations.openError, 6000, "error");
         }
     }
+
+    function progressLabel() {
+        return translations.progress?.replace("{current}", String(snapshot.progress?.current ?? 0));
+    }
 </script>
 
 <div class="sidebar-hub__tools">
@@ -170,6 +175,9 @@
         <p>{query.trim() ? translations.noMatches : translations.empty}</p>
     </div>
 {:else}
+    {#if snapshot.status === "loading" && snapshot.progress && translations.progress}
+        <div class="sidebar-hub__progress" role="status">{progressLabel()}</div>
+    {/if}
     <div class="sidebar-hub__entry-list" aria-busy={snapshot.status === "loading"}>
         {#each snapshot.sections as section (section.key)}
             <section class="sidebar-hub__entry-section" aria-label={sectionLabel ?? translations.searchPlaceholder}>

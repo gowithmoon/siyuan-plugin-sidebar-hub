@@ -5,7 +5,16 @@
         "previousMonth": "上个月",
         "nextMonth": "下个月",
         "minimize": "最小化",
-        "contentPending": "内容将在后续功能中接入。",
+        "createDailyNoteTitle": "创建今日日记",
+        "createDailyNoteMessage": "尚未找到 {date} 的日记，是否创建？",
+        "dailyNotebookRequired": "请先在插件设置中选择日记笔记本。",
+        "dailyNotebookClosed": "所选日记笔记本已关闭，请先重新打开。",
+        "dateCreationUnsupported": "过去或未来日期的日记创建将在后续版本支持。",
+        "dailyNoteLoadError": "日记加载失败。",
+        "dailyNoteOpenError": "无法打开或创建这篇日记。",
+        "dailyNotebook": "日记笔记本",
+        "dailyNotebookDescription": "选择一个已打开且配置了日记路径的笔记本。",
+        "noDailyNotebook": "未选择",
         "visibleTabsDescription": "控制该标签页是否显示在侧边抽屉中。",
         "keepOneTab": "侧边抽屉至少需要保留一个标签页。",
         "tabs": {
@@ -64,6 +73,25 @@
             "openError": "无法打开这个数据库。",
             "sortOptions": {
                 "name": "名称"
+            }
+        },
+        "pages": {
+            "searchPlaceholder": "搜索页面",
+            "sortLabel": "页面排序",
+            "sortAscending": "升序，点击切换为降序",
+            "sortDescending": "降序，点击切换为升序",
+            "refresh": "刷新页面",
+            "retry": "重试",
+            "loading": "正在扫描页面…",
+            "empty": "没有普通页面。",
+            "noMatches": "没有匹配的页面。",
+            "loadError": "页面扫描失败，请重试。",
+            "openError": "无法打开这个页面。",
+            "progress": "已扫描 {current} 个文档",
+            "sortOptions": {
+                "name": "名称",
+                "created": "创建时间",
+                "updated": "修改时间"
             }
         }
     }

@@ -25,7 +25,7 @@ export interface EntrySourceSection {
 export interface EntrySource<TField extends string> {
     readonly sortFields: readonly TField[];
     readonly snapshot: EntrySourceSnapshot;
-    query(input: EntrySourceQuery<TField>): Promise<EntrySourceSnapshot>;
+    query(input: EntrySourceQuery<TField>, onUpdate?: (snapshot: EntrySourceSnapshot) => void): Promise<EntrySourceSnapshot>;
     open(key: string): Promise<void> | void;
     invalidate(): void;
 }
@@ -34,6 +34,10 @@ export interface EntrySourceSnapshot {
     status: "idle" | "loading" | "ready" | "error";
     sections: EntrySourceSection[];
     error?: string;
+    progress?: {
+        current: number;
+        total?: number;
+    };
 }
 
 interface EntrySourceDependencies<TRaw, TField extends string> {

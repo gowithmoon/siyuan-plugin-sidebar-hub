@@ -103,6 +103,26 @@
     box-shadow: none;
 }
 
+.sidebar-hub__day--has-note {
+    position: relative;
+}
+
+.sidebar-hub__day--has-note::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 3px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--b3-theme-primary);
+    transform: translateX(-50%);
+}
+
+.sidebar-hub__day--selected.sidebar-hub__day--has-note::after {
+    background: var(--b3-theme-on-primary);
+}
+
 .sidebar-hub__tabs {
     height: 36px;
     display: grid;
@@ -220,6 +240,13 @@
 
 .sidebar-hub__entry-list[aria-busy="true"] {
     opacity: 0.72;
+}
+
+.sidebar-hub__progress {
+    flex: 0 0 auto;
+    padding: 5px 11px 1px;
+    color: var(--b3-theme-on-surface-light);
+    font-size: 11px;
 }
 
 .sidebar-hub__entry-section h3 {

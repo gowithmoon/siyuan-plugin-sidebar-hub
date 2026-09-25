@@ -9,6 +9,7 @@ export type SidebarTabId = (typeof TAB_DEFINITIONS)[number]["id"];
 
 export interface SidebarHubPreferences {
     activeTab: SidebarTabId;
+    dailyNotebookId: string;
     visibleTabs: Record<SidebarTabId, boolean>;
 }
 
@@ -16,6 +17,7 @@ const TAB_IDS = TAB_DEFINITIONS.map((tab) => tab.id);
 
 export const DEFAULT_PREFERENCES: SidebarHubPreferences = {
     activeTab: "bookmarks",
+    dailyNotebookId: "",
     visibleTabs: {
         bookmarks: true,
         tags: true,
@@ -40,7 +42,11 @@ export function normalizePreferences(value: unknown): SidebarHubPreferences {
         ? requestedActiveTab
         : TAB_IDS.find((tabId) => visibleTabs[tabId])!;
 
-    return { activeTab, visibleTabs };
+    return {
+        activeTab,
+        dailyNotebookId: typeof stored.dailyNotebookId === "string" ? stored.dailyNotebookId : "",
+        visibleTabs,
+    };
 }
 
 export function setTabVisibility(
@@ -58,7 +64,7 @@ export function setTabVisibility(
     }
 
     return normalizePreferences({
-        activeTab: preferences.activeTab,
+        ...preferences,
         visibleTabs,
     });
 }
