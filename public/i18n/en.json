@@ -49,6 +49,22 @@
                 "name": "Name",
                 "count": "Reference count"
             }
+        },
+        "databases": {
+            "searchPlaceholder": "Search databases",
+            "sortLabel": "Database sorting",
+            "sortAscending": "Ascending; click for descending",
+            "sortDescending": "Descending; click for ascending",
+            "refresh": "Refresh databases",
+            "retry": "Retry",
+            "loading": "Loading databases…",
+            "empty": "No databases yet.",
+            "noMatches": "No matching databases.",
+            "loadError": "Databases could not be loaded. Try again.",
+            "openError": "This database could not be opened.",
+            "sortOptions": {
+                "name": "Name"
+            }
         }
     }
 }

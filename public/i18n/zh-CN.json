@@ -49,6 +49,22 @@
                 "name": "名称",
                 "count": "引用数量"
             }
+        },
+        "databases": {
+            "searchPlaceholder": "搜索数据库",
+            "sortLabel": "数据库排序",
+            "sortAscending": "升序，点击切换为降序",
+            "sortDescending": "降序，点击切换为升序",
+            "refresh": "刷新数据库",
+            "retry": "重试",
+            "loading": "正在加载数据库…",
+            "empty": "还没有数据库。",
+            "noMatches": "没有匹配的数据库。",
+            "loadError": "数据库加载失败，请重试。",
+            "openError": "无法打开这个数据库。",
+            "sortOptions": {
+                "name": "名称"
+            }
         }
     }
 }

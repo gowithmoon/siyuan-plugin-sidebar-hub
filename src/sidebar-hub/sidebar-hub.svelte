@@ -7,6 +7,8 @@
     import { loadBookmarkGroups, openBookmark } from "./bookmark-siyuan";
     import { createTagSource } from "./tags";
     import { loadTags, openTag } from "./tag-siyuan";
+    import { createDatabaseSource } from "./databases";
+    import { loadDatabases, openDatabase } from "./database-siyuan";
     import EntrySourcePanel from "./entry-source-panel.svelte";
 
     interface PanelTranslations {
@@ -34,6 +36,7 @@
         tabs: Record<SidebarTabId, string>;
         bookmarks: PanelTranslations & { groupLabel: string };
         tags: PanelTranslations;
+        databases: PanelTranslations;
     }
 
     interface Props {
@@ -53,6 +56,10 @@
     const tagSource = createTagSource({
         load: loadTags,
         open: (label) => openTag(app, label),
+    });
+    const databaseSource = createDatabaseSource({
+        load: loadDatabases,
+        open: (blockId) => openDatabase(app, blockId),
     });
     let preferences = $state<SidebarHubPreferences>();
     let visibleYear = $state(today.getFullYear());
@@ -180,7 +187,17 @@
                 active={preferences.activeTab === "tags"}
             />
         </div>
-        {#if preferences.activeTab !== "bookmarks" && preferences.activeTab !== "tags"}
+        <div class:fn__none={preferences.activeTab !== "databases"} class="sidebar-hub__source-panel">
+            <EntrySourcePanel
+                source={databaseSource}
+                translations={translations.databases}
+                emptyIcon="iconDatabase"
+                sectionLabel={translations.tabs.databases}
+                showSectionLabels={false}
+                active={preferences.activeTab === "databases"}
+            />
+        </div>
+        {#if preferences.activeTab === "pages"}
             <div class="sidebar-hub__state">
                 <svg aria-hidden="true"><use href={`#${TAB_DEFINITIONS.find((tab) => tab.id === preferences.activeTab)!.icon}`}></use></svg>
                 <p>{translations.contentPending}</p>

@@ -3,6 +3,7 @@ import { mount, unmount } from "svelte";
 
 import SidebarHub from "./sidebar-hub/sidebar-hub.svelte";
 import type { BookmarkSortField } from "./sidebar-hub/bookmarks";
+import type { DatabaseSortField } from "./sidebar-hub/databases";
 import {
     DEFAULT_PREFERENCES,
     TAB_DEFINITIONS,
@@ -58,6 +59,20 @@ interface SidebarHubTranslations {
         loadError: string;
         openError: string;
         sortOptions: Record<"name" | "count", string>;
+    };
+    databases: {
+        searchPlaceholder: string;
+        sortLabel: string;
+        sortAscending: string;
+        sortDescending: string;
+        refresh: string;
+        retry: string;
+        loading: string;
+        empty: string;
+        noMatches: string;
+        loadError: string;
+        openError: string;
+        sortOptions: Record<DatabaseSortField, string>;
     };
 }
 
