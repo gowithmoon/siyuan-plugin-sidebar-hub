@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>侧边抽屉 UI Prototype</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f2f3f5;
+            --panel: #ffffff;
+            --text: #202124;
+            --muted: #8a8f98;
+            --primary: #4285f4;
+            --primary-soft: #eaf2ff;
+            --border: #e3e5e8;
+            --hover: #f1f3f5;
+            --selected: #e9eef8;
+            --danger: #d93025;
+            --shadow: 0 14px 36px rgba(33, 40, 52, .14);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+        }
+
+        * { box-sizing: border-box; }
+        body { margin: 0; min-height: 100vh; color: var(--text); background: var(--bg); }
+        button, input, select { font: inherit; color: inherit; }
+        button { cursor: pointer; }
+        button:focus-visible, input:focus-visible, select:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+
+        .prototype-shell {
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: minmax(280px, 340px) 1fr;
+        }
+
+        .sidebar-stage {
+            min-width: 0;
+            padding: 18px 14px 86px;
+            border-right: 1px solid var(--border);
+            background: var(--panel);
+        }
+
+        .context-stage {
+            position: relative;
+            overflow: hidden;
+            padding: 46px clamp(30px, 6vw, 90px) 100px;
+            background:
+                linear-gradient(90deg, rgba(66, 133, 244, .035) 1px, transparent 1px) 0 0 / 32px 32px,
+                linear-gradient(rgba(66, 133, 244, .035) 1px, transparent 1px) 0 0 / 32px 32px,
+                var(--bg);
+        }
+
+        .context-stage h1 { margin: 0 0 10px; font-size: 28px; font-weight: 680; letter-spacing: -.02em; }
+        .context-stage > p { max-width: 640px; margin: 0 0 30px; line-height: 1.75; color: #666d78; }
+        .question-card, .state-card {
+            max-width: 690px;
+            padding: 20px 22px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: rgba(255,255,255,.86);
+            backdrop-filter: blur(8px);
+        }
+        .question-card { margin-bottom: 16px; }
+        .question-card strong, .state-card strong { display: block; margin-bottom: 9px; font-size: 14px; }
+        .question-card p { margin: 0; color: #626975; line-height: 1.65; }
+        .state-card pre { margin: 0; overflow: auto; color: #596170; font: 12px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; }
+
+        .hub {
+            height: calc(100vh - 104px);
+            min-height: 610px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: var(--panel);
+        }
+
+        .icon-button {
+            width: 30px;
+            height: 30px;
+            display: inline-grid;
+            place-items: center;
+            border: 0;
+            border-radius: 5px;
+            background: transparent;
+            color: #6d7480;
+        }
+        .icon-button:hover { background: var(--hover); color: var(--text); }
+        .icon-button.active { color: var(--primary); background: var(--primary-soft); }
+        .icon-button svg { width: 16px; height: 16px; fill: currentColor; }
+
+        .calendar { font-variant-numeric: tabular-nums; }
+        .calendar-head { display: flex; align-items: center; gap: 3px; }
+        .month-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 650; }
+        .today-button { width: auto; padding: 0 8px; gap: 5px; font-size: 12px; }
+        .today-button svg { width: 14px; }
+        .weekdays, .days { display: grid; grid-template-columns: repeat(7, 1fr); }
+        .weekdays span { text-align: center; color: var(--muted); font-size: 11px; }
+        .day {
+            position: relative;
+            aspect-ratio: 1;
+            display: grid;
+            place-items: center;
+            margin: 1px;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            font-size: 12px;
+        }
+        .day:hover { background: var(--hover); }
+        .day.outside { color: #bcc0c7; }
+        .day.today { box-shadow: inset 0 0 0 1px var(--primary); color: var(--primary); font-weight: 650; }
+        .day.selected { background: var(--primary); color: white; box-shadow: none; }
+        .day.has-note::after {
+            content: "";
+            position: absolute;
+            bottom: 3px;
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .tabs { display: grid; grid-template-columns: repeat(4, 1fr); }
+        .tab {
+            min-width: 0;
+            border: 0;
+            background: transparent;
+            color: #707783;
+            white-space: nowrap;
+        }
+        .tab.active { color: var(--primary); font-weight: 650; }
+
+        .tools { display: flex; align-items: center; gap: 4px; }
+        .search-wrap { position: relative; flex: 1; min-width: 0; }
+        .search-wrap svg { position: absolute; left: 8px; top: 50%; width: 14px; height: 14px; fill: #9aa0a8; transform: translateY(-50%); }
+        .search {
+            width: 100%;
+            height: 30px;
+            padding: 0 9px 0 28px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            background: var(--panel);
+            font-size: 12px;
+        }
+        .search::placeholder { color: #a8adb5; }
+
+        .list { flex: 1; min-height: 0; overflow: auto; }
+        .list-item {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 0;
+            background: transparent;
+            text-align: left;
+            color: #333943;
+        }
+        .list-item:hover { background: var(--hover); }
+        .list-item.selected { background: var(--selected); }
+        .list-icon { width: 17px; flex: 0 0 17px; text-align: center; color: #7e8794; }
+        .list-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .list-count { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+        .group-label { color: var(--muted); font-size: 11px; }
+        .empty { padding: 34px 16px; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.7; }
+
+        /* A: native compact — hard dividers, balanced calendar/list */
+        .variant-a .hub { border-radius: 7px; }
+        .variant-a .calendar { padding: 9px 10px 8px; border-bottom: 1px solid var(--border); }
+        .variant-a .calendar-head { margin-bottom: 7px; }
+        .variant-a .weekdays { margin-bottom: 2px; }
+        .variant-a .tabs { height: 36px; border-bottom: 1px solid var(--border); }
+        .variant-a .tab { position: relative; padding: 0 4px; font-size: 12px; }
+        .variant-a .tab.active::after { content: ""; position: absolute; left: 15%; right: 15%; bottom: -1px; height: 2px; background: var(--primary); }
+        .variant-a .tools { padding: 7px 8px; border-bottom: 1px solid var(--border); }
+        .variant-a .list { padding: 4px; }
+        .variant-a .list-item { min-height: 31px; padding: 0 7px; border-radius: 4px; font-size: 12px; }
+        .variant-a .group-label { padding: 8px 7px 3px; }
+
+        /* B: date first — calendar is the dominant workspace */
+        .variant-b .hub { border-radius: 11px; }
+        .variant-b .calendar { padding: 14px 14px 12px; background: linear-gradient(180deg, #f5f8ff 0%, #fff 82%); }
+        .variant-b .calendar-head { margin-bottom: 14px; }
+        .variant-b .month-title { font-size: 18px; letter-spacing: -.02em; }
+        .variant-b .today-button { height: 30px; border-radius: 15px; color: var(--primary); background: var(--primary-soft); }
+        .variant-b .weekdays { margin-bottom: 5px; }
+        .variant-b .weekdays span { font-size: 10px; }
+        .variant-b .day { font-size: 13px; margin: 2px; }
+        .variant-b .day.has-note::after { bottom: 4px; width: 4px; height: 4px; }
+        .variant-b .content-zone { flex: 1; min-height: 0; margin: 0 8px 8px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; }
+        .variant-b .tabs { height: 40px; padding: 4px; gap: 3px; background: #f4f5f7; }
+        .variant-b .tab { border-radius: 5px; font-size: 12px; }
+        .variant-b .tab.active { background: white; box-shadow: 0 1px 3px rgba(28, 35, 45, .12); color: var(--text); }
+        .variant-b .tools { padding: 8px; border-bottom: 1px solid var(--border); }
+        .variant-b .list { padding: 6px; }
+        .variant-b .list-item { min-height: 34px; padding: 0 8px; border-radius: 6px; font-size: 12px; }
+        .variant-b .group-label { padding: 9px 8px 3px; }
+
+        /* C: content first — compressed calendar strip and continuous navigation */
+        .variant-c .hub { border-radius: 4px; }
+        .variant-c .calendar { padding: 8px 8px 5px; border-bottom: 1px solid var(--border); }
+        .variant-c .calendar-head { margin-bottom: 4px; }
+        .variant-c .month-title { font-size: 13px; }
+        .variant-c .today-button { border-left: 1px solid var(--border); border-radius: 0; }
+        .variant-c .weekdays { display: none; }
+        .variant-c .days { grid-template-columns: repeat(7, 1fr); max-height: 116px; overflow: hidden; }
+        .variant-c .day { aspect-ratio: auto; height: 22px; margin: 0; border-radius: 3px; font-size: 11px; }
+        .variant-c .day.has-note::after { bottom: 1px; }
+        .variant-c .tabs { height: 34px; background: #f7f8f9; border-bottom: 1px solid var(--border); }
+        .variant-c .tab { border-right: 1px solid var(--border); font-size: 11px; }
+        .variant-c .tab:last-child { border-right: 0; }
+        .variant-c .tab.active { background: white; color: var(--text); box-shadow: inset 0 -2px var(--primary); }
+        .variant-c .tools { padding: 6px; background: #fafbfc; border-bottom: 1px solid var(--border); }
+        .variant-c .search { border-radius: 3px; border-color: transparent; background: #eef0f3; }
+        .variant-c .list { padding: 2px 0; }
+        .variant-c .list-item { min-height: 29px; padding: 0 10px; font-size: 12px; }
+        .variant-c .group-label { padding: 8px 10px 2px; }
+
+        .prototype-switcher {
+            position: fixed;
+            z-index: 20;
+            left: 50%;
+            bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px;
+            border: 1px solid rgba(255,255,255,.15);
+            border-radius: 22px;
+            background: #20242b;
+            color: white;
+            box-shadow: var(--shadow);
+            transform: translateX(-50%);
+        }
+        .prototype-switcher button { width: 32px; height: 32px; border: 0; border-radius: 50%; color: white; background: rgba(255,255,255,.1); }
+        .prototype-switcher button:hover { background: rgba(255,255,255,.2); }
+        .variant-name { min-width: 156px; text-align: center; font-size: 12px; }
+        .prototype-tag { color: #aeb5c0; font-size: 10px; }
+
+        .toast {
+            position: fixed;
+            left: 18px;
+            bottom: 18px;
+            max-width: 300px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            background: #30343b;
+            color: white;
+            font-size: 12px;
+            box-shadow: var(--shadow);
+            opacity: 0;
+            transform: translateY(8px);
+            pointer-events: none;
+            transition: .16s ease;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+
+        @media (max-width: 760px) {
+            .prototype-shell { grid-template-columns: 1fr; }
+            .sidebar-stage { min-height: 100vh; border-right: 0; }
+            .context-stage { display: none; }
+            .hub { max-width: 360px; margin: 0 auto; }
+        }
+        @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+    </style>
+</head>
+<body>
+    <!-- Three throwaway variants of the Sidebar Hub, switchable via ?variant=A|B|C. -->
+    <main class="prototype-shell">
+        <section class="sidebar-stage" aria-label="侧边抽屉原型"></section>
+        <aside class="context-stage">
+            <h1>侧边抽屉界面原型</h1>
+            <p>这不是正式插件。请在 A、B、C 三个结构方案之间切换，重点判断月历与内容列表的空间比例、标签页样式和日常操作密度。</p>
+            <div class="question-card">
+                <strong>要回答的问题</strong>
+                <p>在约 320 px 的思源侧栏中，月历、今天按钮、横向标签页、搜索排序与条目列表怎样组合最顺手？可以选择一个方案，也可以提出“取 A 的月历 + C 的列表”这类组合。</p>
+            </div>
+            <div class="state-card">
+                <strong>当前原型状态</strong>
+                <pre id="state-output"></pre>
+            </div>
+        </aside>
+    </main>
+
+    <nav class="prototype-switcher" aria-label="原型方案切换">
+        <button type="button" data-direction="-1" aria-label="上一个方案">←</button>
+        <div class="variant-name"><div id="variant-label"></div><div class="prototype-tag">一次性原型 · 非正式界面</div></div>
+        <button type="button" data-direction="1" aria-label="下一个方案">→</button>
+    </nav>
+    <div class="toast" role="status" aria-live="polite"></div>
+
+    <script>
+        const variants = {
+            A: "原生紧凑",
+            B: "日期优先",
+            C: "内容优先",
+        };
+        const tabs = ["书签", "标签", "数据库", "页面"];
+        const data = {
+            书签: [
+                { group: "常用", icon: "★", label: "产品路线图", count: "" },
+                { group: "常用", icon: "▣", label: "阅读清单", count: "" },
+                { group: "稍后处理", icon: "◆", label: "插件开发记录", count: "" },
+                { group: "稍后处理", icon: "▤", label: "旅行计划 · 上海", count: "" },
+                { group: "参考", icon: "◈", label: "API 索引", count: "" },
+                { group: "参考", icon: "◇", label: "写作素材库", count: "" },
+            ],
+            标签: [
+                { icon: "#", label: "项目/侧边抽屉", count: "18" },
+                { icon: "#", label: "项目/思源插件", count: "12" },
+                { icon: "#", label: "状态/进行中", count: "9" },
+                { icon: "#", label: "主题/知识管理", count: "31" },
+                { icon: "#", label: "主题/阅读", count: "24" },
+                { icon: "#", label: "待整理", count: "7" },
+                { icon: "#", label: "灵感", count: "42" },
+            ],
+            数据库: [
+                { icon: "▦", label: "任务", count: "" },
+                { icon: "▦", label: "图书", count: "" },
+                { icon: "▦", label: "项目进度", count: "" },
+                { icon: "▦", label: "文章选题", count: "" },
+                { icon: "▦", label: "软件收藏", count: "" },
+            ],
+            页面: [
+                { icon: "▤", label: "侧边抽屉产品说明", count: "" },
+                { icon: "▤", label: "思源插件 API 备忘", count: "" },
+                { icon: "▤", label: "2026 年目标", count: "" },
+                { icon: "▤", label: "阅读方法", count: "" },
+                { icon: "▤", label: "家庭资料索引", count: "" },
+                { icon: "▤", label: "常用命令", count: "" },
+                { icon: "▤", label: "写作工作流", count: "" },
+                { icon: "▤", label: "课程笔记", count: "" },
+            ],
+        };
+
+        const state = {
+            variant: new URLSearchParams(location.search).get("variant")?.toUpperCase() || "A",
+            monthOffset: 0,
+            selectedDate: "2026-09-25",
+            activeTab: "书签",
+            query: "",
+            sort: "名称升序",
+            selectedItem: "",
+            refreshCount: 0,
+        };
+        if (!variants[state.variant]) state.variant = "A";
+
+        const icons = {
+            home: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 3 10v11h7v-7h4v7h7V10L12 3Z"/></svg>',
+            left: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15.5 5-7 7 7 7 1.5-1.5-5.5-5.5L17 6.5 15.5 5Z"/></svg>',
+            right: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8.5 5-1.5 1.5 5.5 5.5L7 17.5 8.5 19l7-7-7-7Z"/></svg>',
+            search: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20.5 19-4.1-4.1a7 7 0 1 0-1.5 1.5l4.1 4.1 1.5-1.5ZM5 11a6 6 0 1 1 12 0 6 6 0 0 1-12 0Z"/></svg>',
+            sort: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3 3 7h3v11h2V7h3L7 3Zm10 18 4-4h-3V6h-2v11h-3l4 4Z"/></svg>',
+            refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.7-4.2L13 11h8V3l-3.3 3.3Z"/></svg>',
+        };
+
+        function localDate(year, monthIndex, day) {
+            return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        }
+
+        function getCalendarDays() {
+            const base = new Date(2026, 8 + state.monthOffset, 1);
+            const year = base.getFullYear();
+            const month = base.getMonth();
+            const start = (base.getDay() + 6) % 7;
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const daysInPrev = new Date(year, month, 0).getDate();
+            const cells = [];
+            for (let i = start - 1; i >= 0; i--) {
+                const date = new Date(year, month - 1, daysInPrev - i);
+                cells.push({ day: date.getDate(), date: localDate(date.getFullYear(), date.getMonth(), date.getDate()), outside: true });
+            }
+            for (let day = 1; day <= daysInMonth; day++) {
+                cells.push({ day, date: localDate(year, month, day), outside: false });
+            }
+            let next = 1;
+            while (cells.length < 42) {
+                const date = new Date(year, month + 1, next++);
+                cells.push({ day: date.getDate(), date: localDate(date.getFullYear(), date.getMonth(), date.getDate()), outside: true });
+            }
+            return { year, month, cells };
+        }
+
+        function visibleItems() {
+            const query = state.query.trim().toLocaleLowerCase("zh-CN");
+            const items = data[state.activeTab].filter(item => !query || item.label.toLocaleLowerCase("zh-CN").includes(query) || item.group?.includes(query));
+            return [...items].sort((a, b) => {
+                const direction = state.sort.endsWith("降序") ? -1 : 1;
+                if (state.sort.startsWith("引用")) return ((Number(a.count) || 0) - (Number(b.count) || 0)) * direction;
+                return a.label.localeCompare(b.label, "zh-CN", { numeric: true }) * direction;
+            });
+        }
+
+        function sortOptions() {
+            if (state.activeTab === "标签") return ["名称升序", "名称降序", "引用升序", "引用降序"];
+            if (state.activeTab === "数据库") return ["名称升序", "名称降序"];
+            return ["名称升序", "名称降序", "创建时间升序", "创建时间降序", "修改时间升序", "修改时间降序"];
+        }
+
+        function renderCalendar() {
+            const { year, month, cells } = getCalendarDays();
+            const noteDates = new Set(["2026-09-02", "2026-09-08", "2026-09-12", "2026-09-18", "2026-09-22", "2026-09-25"]);
+            return `
+                <section class="calendar" aria-label="日记月历">
+                    <div class="calendar-head">
+                        <div class="month-title">${year} 年 ${month + 1} 月</div>
+                        <button class="icon-button" data-action="previous-month" aria-label="上个月">${icons.left}</button>
+                        <button class="icon-button today-button" data-action="today" aria-label="打开今天的日记">${icons.home}<span>今天</span></button>
+                        <button class="icon-button" data-action="next-month" aria-label="下个月">${icons.right}</button>
+                    </div>
+                    <div class="weekdays" aria-hidden="true">${["一","二","三","四","五","六","日"].map(day => `<span>${day}</span>`).join("")}</div>
+                    <div class="days">
+                        ${cells.map(cell => `<button type="button" class="day${cell.outside ? " outside" : ""}${cell.date === "2026-09-25" ? " today" : ""}${cell.date === state.selectedDate ? " selected" : ""}${noteDates.has(cell.date) ? " has-note" : ""}" data-date="${cell.date}" aria-label="${cell.date}${noteDates.has(cell.date) ? "，已有日记" : ""}">${cell.day}</button>`).join("")}
+                    </div>
+                </section>`;
+        }
+
+        function renderTabs() {
+            return `<div class="tabs" role="tablist">${tabs.map(tab => `<button type="button" class="tab${tab === state.activeTab ? " active" : ""}" data-tab="${tab}" role="tab" aria-selected="${tab === state.activeTab}">${tab}</button>`).join("")}</div>`;
+        }
+
+        function renderTools() {
+            return `<div class="tools">
+                <label class="search-wrap" aria-label="搜索${state.activeTab}">${icons.search}<input class="search" value="${escapeHtml(state.query)}" placeholder="搜索${state.activeTab}" /></label>
+                <button type="button" class="icon-button" data-action="sort" aria-label="排序：${state.sort}" title="${state.sort}">${icons.sort}</button>
+                <button type="button" class="icon-button" data-action="refresh" aria-label="刷新">${icons.refresh}</button>
+            </div>`;
+        }
+
+        function renderList() {
+            const items = visibleItems();
+            if (!items.length) return `<div class="list"><div class="empty">没有匹配的${state.activeTab}<br />清空搜索词后再试。</div></div>`;
+            let previousGroup = "";
+            return `<div class="list" role="list">${items.map(item => {
+                const group = item.group && item.group !== previousGroup ? `<div class="group-label">${item.group}</div>` : "";
+                previousGroup = item.group || previousGroup;
+                return `${group}<button type="button" class="list-item${state.selectedItem === item.label ? " selected" : ""}" data-item="${escapeHtml(item.label)}" role="listitem"><span class="list-icon">${item.icon}</span><span class="list-label">${item.label}</span>${item.count ? `<span class="list-count">${item.count}</span>` : ""}</button>`;
+            }).join("")}</div>`;
+        }
+
+        function render() {
+            const stage = document.querySelector(".sidebar-stage");
+            const content = `${renderTabs()}${renderTools()}${renderList()}`;
+            stage.innerHTML = `<div class="hub variant-${state.variant.toLowerCase()}">${renderCalendar()}${state.variant === "B" ? `<div class="content-zone">${content}</div>` : content}</div>`;
+            document.getElementById("variant-label").textContent = `${state.variant} · ${variants[state.variant]}`;
+            document.getElementById("state-output").textContent = JSON.stringify(state, null, 2);
+            bindEvents();
+        }
+
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char]);
+        }
+
+        let toastTimer;
+        function toast(message) {
+            const element = document.querySelector(".toast");
+            element.textContent = message;
+            element.classList.add("show");
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => element.classList.remove("show"), 1800);
+        }
+
+        function cycleVariant(direction) {
+            const keys = Object.keys(variants);
+            state.variant = keys[(keys.indexOf(state.variant) + direction + keys.length) % keys.length];
+            const url = new URL(location.href);
+            url.searchParams.set("variant", state.variant);
+            history.replaceState({}, "", url);
+            render();
+        }
+
+        function bindEvents() {
+            document.querySelector('[data-action="previous-month"]').onclick = () => { state.monthOffset -= 1; render(); };
+            document.querySelector('[data-action="next-month"]').onclick = () => { state.monthOffset += 1; render(); };
+            document.querySelector('[data-action="today"]').onclick = () => { state.monthOffset = 0; state.selectedDate = "2026-09-25"; render(); toast("打开今天的日记：2026-09-25"); };
+            document.querySelectorAll("[data-date]").forEach(button => button.onclick = () => { state.selectedDate = button.dataset.date; render(); toast(`打开日记：${button.dataset.date}`); });
+            document.querySelectorAll("[data-tab]").forEach(button => button.onclick = () => { state.activeTab = button.dataset.tab; state.query = ""; state.sort = sortOptions()[0]; state.selectedItem = ""; render(); });
+            document.querySelector(".search").oninput = event => { state.query = event.target.value; state.selectedItem = ""; render(); document.querySelector(".search").focus(); };
+            document.querySelector('[data-action="sort"]').onclick = () => { const options = sortOptions(); state.sort = options[(options.indexOf(state.sort) + 1) % options.length]; render(); toast(`排序：${state.sort}`); };
+            document.querySelector('[data-action="refresh"]').onclick = () => { state.refreshCount += 1; render(); toast(`${state.activeTab}已刷新`); };
+            document.querySelectorAll("[data-item]").forEach(button => button.onclick = () => { state.selectedItem = button.dataset.item; render(); toast(`打开${state.activeTab}：${button.dataset.item}`); });
+        }
+
+        document.querySelectorAll(".prototype-switcher button").forEach(button => button.onclick = () => cycleVariant(Number(button.dataset.direction)));
+        addEventListener("keydown", event => {
+            const tagName = document.activeElement?.tagName;
+            if (["INPUT", "TEXTAREA"].includes(tagName) || document.activeElement?.isContentEditable) return;
+            if (event.key === "ArrowLeft") cycleVariant(-1);
+            if (event.key === "ArrowRight") cycleVariant(1);
+        });
+        render();
+    </script>
+</body>
+</html>
