@@ -1,14 +1,13 @@
 <script lang="ts">
     import { onDestroy } from "svelte";
-    import { showMessage, type App } from "siyuan";
+    import { Menu, showMessage, type App } from "siyuan";
 
     import { TAB_DEFINITIONS, type SidebarHubPreferences, type SidebarTabId } from "./preferences";
     import { buildCalendarMonth } from "./calendar";
     import {
-        BOOKMARK_SORT_OPTIONS,
+        BOOKMARK_SORT_FIELDS,
         createBookmarkNavigator,
         type BookmarkSortField,
-        type BookmarkSortValue,
         type BookmarkViewGroup,
         type SortDirection,
     } from "./bookmarks";
@@ -25,6 +24,8 @@
         bookmarks: {
             searchPlaceholder: string;
             sortLabel: string;
+            sortAscending: string;
+            sortDescending: string;
             refresh: string;
             retry: string;
             loading: string;
@@ -33,7 +34,7 @@
             loadError: string;
             openError: string;
             groupLabel: string;
-            sortOptions: Record<BookmarkSortValue, string>;
+            sortOptions: Record<BookmarkSortField, string>;
         };
     }
 
@@ -142,14 +143,42 @@
         }, 180);
     }
 
-    function changeBookmarkSort(event: Event) {
-        const value = (event.currentTarget as HTMLSelectElement).value;
-        const option = BOOKMARK_SORT_OPTIONS.find((item) => item.value === value);
-        if (!option) {
+    function setBookmarkSortField(field: BookmarkSortField) {
+        bookmarkSortField = field;
+        if (bookmarkStatus !== "error") {
+            void updateBookmarks();
+        }
+    }
+
+    function openBookmarkSortMenu(event: MouseEvent) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const button = event.currentTarget as HTMLButtonElement;
+        const menu = new Menu("sidebar-hub-bookmark-sort");
+        if (menu.isOpen) {
             return;
         }
-        bookmarkSortField = option.sort.field;
-        bookmarkSortDirection = option.sort.direction;
+
+        for (const field of BOOKMARK_SORT_FIELDS) {
+            menu.addItem({
+                label: translations.bookmarks.sortOptions[field],
+                icon: field === bookmarkSortField ? "iconSelect" : undefined,
+                click: () => setBookmarkSortField(field),
+            });
+        }
+
+        const rect = button.getBoundingClientRect();
+        menu.open({
+            x: rect.left,
+            y: rect.bottom,
+            h: rect.height,
+            w: rect.width,
+        });
+    }
+
+    function toggleBookmarkSortDirection() {
+        bookmarkSortDirection = bookmarkSortDirection === "asc" ? "desc" : "asc";
         if (bookmarkStatus !== "error") {
             void updateBookmarks();
         }
@@ -250,16 +279,25 @@
                         oninput={changeBookmarkQuery}
                     />
                 </label>
-                <select
-                    class="b3-select sidebar-hub__sort"
-                    aria-label={translations.bookmarks.sortLabel}
-                    value={`${bookmarkSortField}:${bookmarkSortDirection}`}
-                    onchange={changeBookmarkSort}
+                <button
+                    type="button"
+                    class="block__icon block__icon--show ariaLabel"
+                    data-position="south"
+                    aria-label={`${translations.bookmarks.sortLabel}：${translations.bookmarks.sortOptions[bookmarkSortField]}`}
+                    onclick={openBookmarkSortMenu}
                 >
-                    {#each BOOKMARK_SORT_OPTIONS as option (option.value)}
-                        <option value={option.value}>{translations.bookmarks.sortOptions[option.value]}</option>
-                    {/each}
-                </select>
+                    <svg aria-hidden="true"><use href="#iconSort"></use></svg>
+                </button>
+                <button
+                    type="button"
+                    class="block__icon block__icon--show ariaLabel sidebar-hub__sort-direction"
+                    data-position="south"
+                    aria-label={bookmarkSortDirection === "asc" ? translations.bookmarks.sortAscending : translations.bookmarks.sortDescending}
+                    aria-pressed={bookmarkSortDirection === "desc"}
+                    onclick={toggleBookmarkSortDirection}
+                >
+                    <svg aria-hidden="true"><use href={bookmarkSortDirection === "asc" ? "#iconUp" : "#iconDown"}></use></svg>
+                </button>
                 <button
                     type="button"
                     class="block__icon block__icon--show ariaLabel"

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-    BOOKMARK_SORT_OPTIONS,
+    BOOKMARK_SORT_FIELDS,
     createBookmarkNavigator,
     type BookmarkGroup,
 } from "./bookmarks";
@@ -44,15 +44,8 @@ const groups: BookmarkGroup[] = [
 ];
 
 describe("书签导航", () => {
-    it("只声明书签可靠支持的六种排序", () => {
-        expect(BOOKMARK_SORT_OPTIONS.map((option) => option.value)).toEqual([
-            "name:asc",
-            "name:desc",
-            "created:asc",
-            "created:desc",
-            "updated:asc",
-            "updated:desc",
-        ]);
+    it("只声明书签可靠支持的三个排序字段", () => {
+        expect(BOOKMARK_SORT_FIELDS).toEqual(["name", "created", "updated"]);
     });
 
     it("加载后保留分组和组内文档、块书签", async () => {

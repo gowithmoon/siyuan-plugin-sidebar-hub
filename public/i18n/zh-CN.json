@@ -17,6 +17,8 @@
         "bookmarks": {
             "searchPlaceholder": "搜索书签",
             "sortLabel": "书签排序",
+            "sortAscending": "升序，点击切换为降序",
+            "sortDescending": "降序，点击切换为升序",
             "refresh": "刷新书签",
             "retry": "重试",
             "loading": "正在加载书签…",
@@ -26,12 +28,9 @@
             "openError": "无法打开这个书签。",
             "groupLabel": "书签分组",
             "sortOptions": {
-                "name:asc": "名称 ↑",
-                "name:desc": "名称 ↓",
-                "created:asc": "创建时间 ↑",
-                "created:desc": "创建时间 ↓",
-                "updated:asc": "修改时间 ↑",
-                "updated:desc": "修改时间 ↓"
+                "name": "名称",
+                "created": "创建时间",
+                "updated": "修改时间"
             }
         }
     }

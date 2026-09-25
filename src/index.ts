@@ -2,7 +2,7 @@ import { Plugin, Setting, showMessage } from "siyuan";
 import { mount, unmount } from "svelte";
 
 import SidebarHub from "./sidebar-hub/sidebar-hub.svelte";
-import type { BookmarkSortValue } from "./sidebar-hub/bookmarks";
+import type { BookmarkSortField } from "./sidebar-hub/bookmarks";
 import {
     DEFAULT_PREFERENCES,
     TAB_DEFINITIONS,
@@ -33,6 +33,8 @@ interface SidebarHubTranslations {
     bookmarks: {
         searchPlaceholder: string;
         sortLabel: string;
+        sortAscending: string;
+        sortDescending: string;
         refresh: string;
         retry: string;
         loading: string;
@@ -41,7 +43,7 @@ interface SidebarHubTranslations {
         loadError: string;
         openError: string;
         groupLabel: string;
-        sortOptions: Record<BookmarkSortValue, string>;
+        sortOptions: Record<BookmarkSortField, string>;
     };
 }
 

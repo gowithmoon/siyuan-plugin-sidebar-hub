@@ -17,6 +17,8 @@
         "bookmarks": {
             "searchPlaceholder": "Search bookmarks",
             "sortLabel": "Bookmark sorting",
+            "sortAscending": "Ascending; click for descending",
+            "sortDescending": "Descending; click for ascending",
             "refresh": "Refresh bookmarks",
             "retry": "Retry",
             "loading": "Loading bookmarks…",
@@ -26,12 +28,9 @@
             "openError": "This bookmark could not be opened.",
             "groupLabel": "Bookmark group",
             "sortOptions": {
-                "name:asc": "Name ↑",
-                "name:desc": "Name ↓",
-                "created:asc": "Created ↑",
-                "created:desc": "Created ↓",
-                "updated:asc": "Modified ↑",
-                "updated:desc": "Modified ↓"
+                "name": "Name",
+                "created": "Created",
+                "updated": "Modified"
             }
         }
     }

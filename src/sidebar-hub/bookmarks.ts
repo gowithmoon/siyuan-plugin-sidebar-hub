@@ -1,18 +1,7 @@
 export type BookmarkSortField = "name" | "created" | "updated";
 export type SortDirection = "asc" | "desc";
-export type BookmarkSortValue = `${BookmarkSortField}:${SortDirection}`;
 
-export const BOOKMARK_SORT_OPTIONS: ReadonlyArray<{
-    value: BookmarkSortValue;
-    sort: BookmarkSort;
-}> = [
-    { value: "name:asc", sort: { field: "name", direction: "asc" } },
-    { value: "name:desc", sort: { field: "name", direction: "desc" } },
-    { value: "created:asc", sort: { field: "created", direction: "asc" } },
-    { value: "created:desc", sort: { field: "created", direction: "desc" } },
-    { value: "updated:asc", sort: { field: "updated", direction: "asc" } },
-    { value: "updated:desc", sort: { field: "updated", direction: "desc" } },
-];
+export const BOOKMARK_SORT_FIELDS: readonly BookmarkSortField[] = ["name", "created", "updated"];
 
 export interface BookmarkSort {
     field: BookmarkSortField;
