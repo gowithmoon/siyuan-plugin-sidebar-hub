@@ -1,12 +1,13 @@
+import {
+    createEntrySource,
+    type EntrySource,
+    type EntrySourceQuery,
+    type EntrySourceSection,
+} from "./entry-source";
+
 export type BookmarkSortField = "name" | "created" | "updated";
-export type SortDirection = "asc" | "desc";
 
 export const BOOKMARK_SORT_FIELDS: readonly BookmarkSortField[] = ["name", "created", "updated"];
-
-export interface BookmarkSort {
-    field: BookmarkSortField;
-    direction: SortDirection;
-}
 
 export interface BookmarkBlock {
     id: string;
@@ -24,97 +25,59 @@ export interface BookmarkGroup {
     blocks: BookmarkBlock[];
 }
 
-export interface BookmarkEntry {
-    id: string;
-    rootID: string;
-    label: string;
-    created: string;
-    updated: string;
-}
-
-export interface BookmarkViewGroup {
-    name: string;
-    entries: BookmarkEntry[];
-}
-
-interface BookmarkNavigatorDependencies {
+interface BookmarkDependencies {
     load: () => Promise<BookmarkGroup[]>;
     open: (blockId: string) => Promise<void> | void;
 }
 
-interface BookmarkQuery {
-    query: string;
-    sort: BookmarkSort;
+interface BookmarkRecord {
+    key: string;
+    label: string;
+    icon: string;
+    created: string;
+    updated: string;
 }
 
-export function createBookmarkNavigator(dependencies: BookmarkNavigatorDependencies) {
-    let cachedGroups: BookmarkGroup[] | undefined;
-    let loadingGroups: Promise<BookmarkGroup[]> | undefined;
-    let cacheVersion = 0;
-
-    async function getGroups() {
-        if (!cachedGroups) {
-            const requestedVersion = cacheVersion;
-            loadingGroups ??= dependencies.load();
-            try {
-                const loadedGroups = await loadingGroups;
-                if (requestedVersion === cacheVersion) {
-                    cachedGroups = loadedGroups;
-                }
-                return loadedGroups;
-            } finally {
-                if (requestedVersion === cacheVersion) {
-                    loadingGroups = undefined;
-                }
-            }
-        }
-        return cachedGroups;
-    }
-
-    return {
-        async query(input: BookmarkQuery): Promise<BookmarkViewGroup[]> {
-            const groups = await getGroups();
-            return filterAndSortBookmarks(groups, input);
-        },
-        async open(entry: BookmarkEntry) {
-            await dependencies.open(entry.id);
-        },
-        invalidate() {
-            cacheVersion += 1;
-            cachedGroups = undefined;
-            loadingGroups = undefined;
-        },
-    };
+export function createBookmarkSource(dependencies: BookmarkDependencies): EntrySource<BookmarkSortField> {
+    return createEntrySource({
+        sortFields: BOOKMARK_SORT_FIELDS,
+        load: dependencies.load,
+        build: buildBookmarkSections,
+        open: dependencies.open,
+    });
 }
 
-function filterAndSortBookmarks(groups: BookmarkGroup[], input: BookmarkQuery): BookmarkViewGroup[] {
+function buildBookmarkSections(
+    groups: BookmarkGroup[],
+    input: EntrySourceQuery<BookmarkSortField>,
+): EntrySourceSection[] {
     const keywords = input.query.toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
     const direction = input.sort.direction === "asc" ? 1 : -1;
 
     return groups
         .map((group) => {
-            const entries = (group.blocks ?? []).map(toBookmarkEntry);
-            const groupMatches = matchesKeywords(group.name, keywords);
-            const visibleEntries = groupMatches
+            const entries = (group.blocks ?? []).map(toBookmarkRecord);
+            const visibleEntries = matchesKeywords(group.name, keywords)
                 ? entries
                 : entries.filter((entry) => matchesKeywords(entry.label, keywords));
 
             return {
-                name: group.name,
-                entries: visibleEntries.sort((left, right) =>
-                    compareEntries(left, right, input.sort.field) * direction,
-                ),
+                key: group.name,
+                label: group.name,
+                entries: visibleEntries
+                    .sort((left, right) => compareRecords(left, right, input.sort.field) * direction)
+                    .map(({ key, label, icon }) => ({ key, label, icon })),
             };
         })
         .filter((group) => group.entries.length > 0)
-        .sort((left, right) => compareText(left.name, right.name));
+        .sort((left, right) => compareText(left.label ?? "", right.label ?? ""));
 }
 
-function toBookmarkEntry(block: BookmarkBlock): BookmarkEntry {
+function toBookmarkRecord(block: BookmarkBlock): BookmarkRecord {
     return {
-        id: block.id,
-        rootID: block.rootID,
+        key: block.id,
         label: plainText(block.content) || block.name || block.hPath || block.id,
+        icon: block.id === block.rootID ? "iconFile" : "iconBookmark",
         created: block.created,
         updated: block.updated,
     };
@@ -125,13 +88,12 @@ function matchesKeywords(value: string, keywords: string[]) {
     return keywords.every((keyword) => normalized.includes(keyword));
 }
 
-function compareEntries(left: BookmarkEntry, right: BookmarkEntry, field: BookmarkSortField) {
+function compareRecords(left: BookmarkRecord, right: BookmarkRecord, field: BookmarkSortField) {
     if (field === "name") {
         return compareText(left.label, right.label);
     }
 
-    const byTimestamp = left[field].localeCompare(right[field]);
-    return byTimestamp || compareText(left.label, right.label);
+    return left[field].localeCompare(right[field]) || compareText(left.label, right.label);
 }
 
 function compareText(left: string, right: string) {

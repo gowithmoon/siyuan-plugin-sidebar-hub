@@ -6,12 +6,13 @@
     import { buildCalendarMonth } from "./calendar";
     import {
         BOOKMARK_SORT_FIELDS,
-        createBookmarkNavigator,
+        createBookmarkSource,
         type BookmarkSortField,
-        type BookmarkViewGroup,
-        type SortDirection,
     } from "./bookmarks";
     import { loadBookmarkGroups, openBookmark } from "./bookmark-siyuan";
+    import { createTagSource, TAG_SORT_FIELDS, type TagSortField } from "./tags";
+    import { loadTags, openTag } from "./tag-siyuan";
+    import type { EntrySourceSection, SortDirection } from "./entry-source";
 
     interface Translations {
         title: string;
@@ -36,6 +37,20 @@
             groupLabel: string;
             sortOptions: Record<BookmarkSortField, string>;
         };
+        tags: {
+            searchPlaceholder: string;
+            sortLabel: string;
+            sortAscending: string;
+            sortDescending: string;
+            refresh: string;
+            retry: string;
+            loading: string;
+            empty: string;
+            noMatches: string;
+            loadError: string;
+            openError: string;
+            sortOptions: Record<TagSortField, string>;
+        };
     }
 
     interface Props {
@@ -48,9 +63,13 @@
 
     let { app, preferences: initialPreferences, translations, instanceId, onActiveTabChange }: Props = $props();
     const today = new Date();
-    const bookmarkNavigator = createBookmarkNavigator({
+    const bookmarkSource = createBookmarkSource({
         load: loadBookmarkGroups,
         open: (blockId) => openBookmark(app, blockId),
+    });
+    const tagSource = createTagSource({
+        load: loadTags,
+        open: (label) => openTag(app, label),
     });
     let preferences = $state<SidebarHubPreferences>();
     let visibleYear = $state(today.getFullYear());
@@ -59,11 +78,19 @@
     let bookmarkQuery = $state("");
     let bookmarkSortField = $state<BookmarkSortField>("name");
     let bookmarkSortDirection = $state<SortDirection>("asc");
-    let bookmarkGroups = $state<BookmarkViewGroup[]>([]);
+    let bookmarkSections = $state<EntrySourceSection[]>([]);
     let bookmarkStatus = $state<"idle" | "loading" | "ready" | "error">("idle");
     let bookmarkError = $state("");
     let bookmarkRequestId = 0;
     let bookmarkSearchTimer: ReturnType<typeof setTimeout> | undefined;
+    let tagQuery = $state("");
+    let tagSortField = $state<TagSortField>("name");
+    let tagSortDirection = $state<SortDirection>("asc");
+    let tagSections = $state<EntrySourceSection[]>([]);
+    let tagStatus = $state<"idle" | "loading" | "ready" | "error">("idle");
+    let tagError = $state("");
+    let tagRequestId = 0;
+    let tagSearchTimer: ReturnType<typeof setTimeout> | undefined;
     let calendar = $derived(buildCalendarMonth(visibleYear, visibleMonth, today));
     let visibleTabs = $derived(TAB_DEFINITIONS.filter((tab) => preferences.visibleTabs[tab.id]));
 
@@ -73,9 +100,15 @@
         if (preferences.activeTab === "bookmarks" && bookmarkStatus === "idle") {
             void updateBookmarks();
         }
+        if (preferences.activeTab === "tags" && tagStatus === "idle") {
+            void updateTags();
+        }
     });
 
-    onDestroy(() => clearTimeout(bookmarkSearchTimer));
+    onDestroy(() => {
+        clearTimeout(bookmarkSearchTimer);
+        clearTimeout(tagSearchTimer);
+    });
 
     function initializePreferences() {
         preferences = initialPreferences;
@@ -104,13 +137,13 @@
     async function updateBookmarks(options: { invalidate?: boolean } = {}) {
         const requestId = ++bookmarkRequestId;
         if (options.invalidate) {
-            bookmarkNavigator.invalidate();
+            bookmarkSource.invalidate();
         }
         bookmarkStatus = "loading";
         bookmarkError = "";
 
         try {
-            const groups = await bookmarkNavigator.query({
+            const sections = await bookmarkSource.query({
                 query: bookmarkQuery,
                 sort: {
                     field: bookmarkSortField,
@@ -120,7 +153,7 @@
             if (requestId !== bookmarkRequestId) {
                 return;
             }
-            bookmarkGroups = groups;
+            bookmarkSections = sections;
             bookmarkStatus = "ready";
         } catch (error) {
             if (requestId !== bookmarkRequestId) {
@@ -184,11 +217,102 @@
         }
     }
 
-    async function openBookmarkEntry(groupIndex: number, entryIndex: number) {
+    async function updateTags(options: { invalidate?: boolean } = {}) {
+        const requestId = ++tagRequestId;
+        if (options.invalidate) {
+            tagSource.invalidate();
+        }
+        tagStatus = "loading";
+        tagError = "";
+
         try {
-            await bookmarkNavigator.open(bookmarkGroups[groupIndex].entries[entryIndex]);
+            const sections = await tagSource.query({
+                query: tagQuery,
+                sort: {
+                    field: tagSortField,
+                    direction: tagSortDirection,
+                },
+            });
+            if (requestId !== tagRequestId) {
+                return;
+            }
+            tagSections = sections;
+            tagStatus = "ready";
+        } catch (error) {
+            if (requestId !== tagRequestId) {
+                return;
+            }
+            tagError = error instanceof Error && error.message
+                ? error.message
+                : translations.tags.loadError;
+            tagStatus = "error";
+        }
+    }
+
+    function changeTagQuery(event: Event) {
+        tagQuery = (event.currentTarget as HTMLInputElement).value;
+        clearTimeout(tagSearchTimer);
+        tagSearchTimer = setTimeout(() => {
+            if (tagStatus !== "error") {
+                void updateTags();
+            }
+        }, 180);
+    }
+
+    function setTagSortField(field: TagSortField) {
+        tagSortField = field;
+        if (tagStatus !== "error") {
+            void updateTags();
+        }
+    }
+
+    function openTagSortMenu(event: MouseEvent) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const button = event.currentTarget as HTMLButtonElement;
+        const menu = new Menu("sidebar-hub-tag-sort");
+        if (menu.isOpen) {
+            return;
+        }
+
+        for (const field of TAG_SORT_FIELDS) {
+            menu.addItem({
+                label: translations.tags.sortOptions[field],
+                icon: field === tagSortField ? "iconSelect" : undefined,
+                click: () => setTagSortField(field),
+            });
+        }
+
+        const rect = button.getBoundingClientRect();
+        menu.open({
+            x: rect.left,
+            y: rect.bottom,
+            h: rect.height,
+            w: rect.width,
+        });
+    }
+
+    function toggleTagSortDirection() {
+        tagSortDirection = tagSortDirection === "asc" ? "desc" : "asc";
+        if (tagStatus !== "error") {
+            void updateTags();
+        }
+    }
+
+    async function openBookmarkEntry(key: string) {
+        try {
+            await bookmarkSource.open(key);
         } catch {
             showMessage(translations.bookmarks.openError, 6000, "error");
+        }
+    }
+
+    async function openTagEntry(key: string) {
+        try {
+            await tagSource.open(key);
+        } catch {
+            showMessage(translations.tags.openError, 6000, "error");
         }
     }
 </script>
@@ -309,7 +433,7 @@
                 </button>
             </div>
 
-            {#if bookmarkStatus === "loading" && bookmarkGroups.length === 0}
+            {#if bookmarkStatus === "loading" && bookmarkSections.length === 0}
                 <div class="sidebar-hub__state" role="status">
                     <svg class="fn__rotate" aria-hidden="true"><use href="#iconRefresh"></use></svg>
                     <p>{translations.bookmarks.loading}</p>
@@ -325,24 +449,108 @@
                         {translations.bookmarks.retry}
                     </button>
                 </div>
-            {:else if bookmarkStatus === "ready" && bookmarkGroups.length === 0}
+            {:else if bookmarkStatus === "ready" && bookmarkSections.length === 0}
                 <div class="sidebar-hub__state">
                     <svg aria-hidden="true"><use href="#iconBookmark"></use></svg>
                     <p>{bookmarkQuery.trim() ? translations.bookmarks.noMatches : translations.bookmarks.empty}</p>
                 </div>
             {:else}
-                <div class="sidebar-hub__bookmark-list" aria-busy={bookmarkStatus === "loading"}>
-                    {#each bookmarkGroups as group, groupIndex (group.name)}
-                        <section class="sidebar-hub__bookmark-group" aria-label={`${translations.bookmarks.groupLabel}：${group.name}`}>
-                            <h3>{group.name}</h3>
-                            {#each group.entries as entry, entryIndex (entry.id)}
+                <div class="sidebar-hub__entry-list" aria-busy={bookmarkStatus === "loading"}>
+                    {#each bookmarkSections as group (group.key)}
+                        <section class="sidebar-hub__entry-section" aria-label={`${translations.bookmarks.groupLabel}：${group.label}`}>
+                            {#if group.label}<h3>{group.label}</h3>{/if}
+                            {#each group.entries as entry (entry.key)}
                                 <button
                                     type="button"
                                     class="sidebar-hub__list-item"
                                     title={entry.label}
-                                    onclick={() => openBookmarkEntry(groupIndex, entryIndex)}
+                                    onclick={() => openBookmarkEntry(entry.key)}
                                 >
-                                    <svg aria-hidden="true"><use href={entry.id === entry.rootID ? "#iconFile" : "#iconBookmark"}></use></svg>
+                                    <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
+                                    <span>{entry.label}</span>
+                                </button>
+                            {/each}
+                        </section>
+                    {/each}
+                </div>
+            {/if}
+        {:else if preferences.activeTab === "tags"}
+            <div class="sidebar-hub__tools">
+                <label class="sidebar-hub__search">
+                    <svg aria-hidden="true"><use href="#iconSearch"></use></svg>
+                    <input
+                        type="search"
+                        class="b3-text-field"
+                        value={tagQuery}
+                        placeholder={translations.tags.searchPlaceholder}
+                        aria-label={translations.tags.searchPlaceholder}
+                        oninput={changeTagQuery}
+                    />
+                </label>
+                <button
+                    type="button"
+                    class="block__icon block__icon--show ariaLabel"
+                    data-position="south"
+                    aria-label={`${translations.tags.sortLabel}：${translations.tags.sortOptions[tagSortField]}`}
+                    onclick={openTagSortMenu}
+                >
+                    <svg aria-hidden="true"><use href="#iconSort"></use></svg>
+                </button>
+                <button
+                    type="button"
+                    class="block__icon block__icon--show ariaLabel sidebar-hub__sort-direction"
+                    data-position="south"
+                    aria-label={tagSortDirection === "asc" ? translations.tags.sortAscending : translations.tags.sortDescending}
+                    aria-pressed={tagSortDirection === "desc"}
+                    onclick={toggleTagSortDirection}
+                >
+                    <svg aria-hidden="true"><use href={tagSortDirection === "asc" ? "#iconUp" : "#iconDown"}></use></svg>
+                </button>
+                <button
+                    type="button"
+                    class="block__icon block__icon--show ariaLabel"
+                    data-position="south"
+                    aria-label={translations.tags.refresh}
+                    onclick={() => updateTags({ invalidate: true })}
+                >
+                    <svg class:fn__rotate={tagStatus === "loading"} aria-hidden="true"><use href="#iconRefresh"></use></svg>
+                </button>
+            </div>
+
+            {#if tagStatus === "loading" && tagSections.length === 0}
+                <div class="sidebar-hub__state" role="status">
+                    <svg class="fn__rotate" aria-hidden="true"><use href="#iconRefresh"></use></svg>
+                    <p>{translations.tags.loading}</p>
+                </div>
+            {:else if tagStatus === "error"}
+                <div class="sidebar-hub__state" role="alert">
+                    <svg aria-hidden="true"><use href="#iconInfo"></use></svg>
+                    <p>{translations.tags.loadError}</p>
+                    {#if tagError && tagError !== translations.tags.loadError}
+                        <small>{tagError}</small>
+                    {/if}
+                    <button type="button" class="b3-button b3-button--outline" onclick={() => updateTags()}>
+                        {translations.tags.retry}
+                    </button>
+                </div>
+            {:else if tagStatus === "ready" && tagSections.length === 0}
+                <div class="sidebar-hub__state">
+                    <svg aria-hidden="true"><use href="#iconTag"></use></svg>
+                    <p>{tagQuery.trim() ? translations.tags.noMatches : translations.tags.empty}</p>
+                </div>
+            {:else}
+                <div class="sidebar-hub__entry-list" aria-busy={tagStatus === "loading"}>
+                    {#each tagSections as section (section.key)}
+                        <section class="sidebar-hub__entry-section" aria-label={translations.tabs.tags}>
+                            {#if section.label}<h3>{section.label}</h3>{/if}
+                            {#each section.entries as entry (entry.key)}
+                                <button
+                                    type="button"
+                                    class="sidebar-hub__list-item"
+                                    title={entry.label}
+                                    onclick={() => openTagEntry(entry.key)}
+                                >
+                                    <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
                                     <span>{entry.label}</span>
                                 </button>
                             {/each}

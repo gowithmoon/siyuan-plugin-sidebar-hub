@@ -204,18 +204,18 @@
     background: var(--b3-list-hover);
 }
 
-.sidebar-hub__bookmark-list {
+.sidebar-hub__entry-list {
     flex: 1 1 auto;
     min-height: 0;
     padding: 4px;
     overflow: auto;
 }
 
-.sidebar-hub__bookmark-list[aria-busy="true"] {
+.sidebar-hub__entry-list[aria-busy="true"] {
     opacity: 0.72;
 }
 
-.sidebar-hub__bookmark-group h3 {
+.sidebar-hub__entry-section h3 {
     margin: 0;
     padding: 8px 7px 3px;
     color: var(--b3-theme-on-surface-light);

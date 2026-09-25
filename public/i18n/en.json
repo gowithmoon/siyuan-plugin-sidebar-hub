@@ -32,6 +32,23 @@
                 "created": "Created",
                 "updated": "Modified"
             }
+        },
+        "tags": {
+            "searchPlaceholder": "Search tags",
+            "sortLabel": "Tag sorting",
+            "sortAscending": "Ascending; click for descending",
+            "sortDescending": "Descending; click for ascending",
+            "refresh": "Refresh tags",
+            "retry": "Retry",
+            "loading": "Loading tags…",
+            "empty": "No tags yet.",
+            "noMatches": "No matching tags.",
+            "loadError": "Tags could not be loaded. Try again.",
+            "openError": "This tag could not be opened.",
+            "sortOptions": {
+                "name": "Name",
+                "count": "Reference count"
+            }
         }
     }
 }

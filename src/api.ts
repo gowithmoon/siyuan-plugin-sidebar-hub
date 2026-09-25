@@ -15,7 +15,8 @@ export interface ApiResponse<T = any> {
     data: T | null;
 }
 
-export const currentAppId = (): string | undefined => window.siyuan?.ws?.app?.appId;
+export const currentAppId = (): string | undefined =>
+    typeof window === "undefined" ? undefined : window.siyuan?.ws?.app?.appId;
 
 /**
  * Execute a SiYuan kernel API request while retaining its status and raw response.

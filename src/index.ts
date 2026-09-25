@@ -45,6 +45,20 @@ interface SidebarHubTranslations {
         groupLabel: string;
         sortOptions: Record<BookmarkSortField, string>;
     };
+    tags: {
+        searchPlaceholder: string;
+        sortLabel: string;
+        sortAscending: string;
+        sortDescending: string;
+        refresh: string;
+        retry: string;
+        loading: string;
+        empty: string;
+        noMatches: string;
+        loadError: string;
+        openError: string;
+        sortOptions: Record<"name" | "count", string>;
+    };
 }
 
 export default class SidebarHubPlugin extends Plugin {

@@ -32,6 +32,23 @@
                 "created": "创建时间",
                 "updated": "修改时间"
             }
+        },
+        "tags": {
+            "searchPlaceholder": "搜索标签",
+            "sortLabel": "标签排序",
+            "sortAscending": "升序，点击切换为降序",
+            "sortDescending": "降序，点击切换为升序",
+            "refresh": "刷新标签",
+            "retry": "重试",
+            "loading": "正在加载标签…",
+            "empty": "还没有标签。",
+            "noMatches": "没有匹配的标签。",
+            "loadError": "标签加载失败，请重试。",
+            "openError": "无法打开这个标签。",
+            "sortOptions": {
+                "name": "名称",
+                "count": "引用数量"
+            }
         }
     }
 }
