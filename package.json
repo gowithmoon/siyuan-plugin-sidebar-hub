@@ -1,11 +1,11 @@
 {
-  "name": "plugin-sample-vite-svelte",
-  "version": "0.5.1",
+  "name": "siyuan-plugin-sidebar-hub",
+  "version": "0.1.0",
   "type": "module",
-  "description": "This is a sample plugin based on vite and svelte for Siyuan (https://b3log.org/siyuan)",
-  "repository": "",
-  "homepage": "",
-  "author": "frostime",
+  "description": "A unified SiYuan sidebar for daily notes, bookmarks, tags, databases, and pages.",
+  "repository": "https://github.com/gowithmoon/siyuan-plugin-sidebar-hub.git",
+  "homepage": "https://github.com/gowithmoon/siyuan-plugin-sidebar-hub",
+  "author": "gowithmoon",
   "license": "MIT",
   "packageManager": "pnpm@11.4.0",
   "engines": {
