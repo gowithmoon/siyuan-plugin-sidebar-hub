@@ -13,6 +13,26 @@
             "tags": "Tags",
             "databases": "Databases",
             "pages": "Pages"
+        },
+        "bookmarks": {
+            "searchPlaceholder": "Search bookmarks",
+            "sortLabel": "Bookmark sorting",
+            "refresh": "Refresh bookmarks",
+            "retry": "Retry",
+            "loading": "Loading bookmarks…",
+            "empty": "No bookmarks yet.",
+            "noMatches": "No matching bookmarks.",
+            "loadError": "Bookmarks could not be loaded. Try again.",
+            "openError": "This bookmark could not be opened.",
+            "groupLabel": "Bookmark group",
+            "sortOptions": {
+                "name:asc": "Name ↑",
+                "name:desc": "Name ↓",
+                "created:asc": "Created ↑",
+                "created:desc": "Created ↓",
+                "updated:asc": "Modified ↑",
+                "updated:desc": "Modified ↓"
+            }
         }
     }
 }

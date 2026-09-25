@@ -13,6 +13,26 @@
             "tags": "标签",
             "databases": "数据库",
             "pages": "页面"
+        },
+        "bookmarks": {
+            "searchPlaceholder": "搜索书签",
+            "sortLabel": "书签排序",
+            "refresh": "刷新书签",
+            "retry": "重试",
+            "loading": "正在加载书签…",
+            "empty": "还没有书签。",
+            "noMatches": "没有匹配的书签。",
+            "loadError": "书签加载失败，请重试。",
+            "openError": "无法打开这个书签。",
+            "groupLabel": "书签分组",
+            "sortOptions": {
+                "name:asc": "名称 ↑",
+                "name:desc": "名称 ↓",
+                "created:asc": "创建时间 ↑",
+                "created:desc": "创建时间 ↓",
+                "updated:asc": "修改时间 ↑",
+                "updated:desc": "修改时间 ↓"
+            }
         }
     }
 }

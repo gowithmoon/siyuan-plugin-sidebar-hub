@@ -2,6 +2,7 @@ import { Plugin, Setting, showMessage } from "siyuan";
 import { mount, unmount } from "svelte";
 
 import SidebarHub from "./sidebar-hub/sidebar-hub.svelte";
+import type { BookmarkSortValue } from "./sidebar-hub/bookmarks";
 import {
     DEFAULT_PREFERENCES,
     TAB_DEFINITIONS,
@@ -29,6 +30,19 @@ interface SidebarHubTranslations {
     visibleTabsDescription: string;
     keepOneTab: string;
     tabs: Record<SidebarTabId, string>;
+    bookmarks: {
+        searchPlaceholder: string;
+        sortLabel: string;
+        refresh: string;
+        retry: string;
+        loading: string;
+        empty: string;
+        noMatches: string;
+        loadError: string;
+        openError: string;
+        groupLabel: string;
+        sortOptions: Record<BookmarkSortValue, string>;
+    };
 }
 
 export default class SidebarHubPlugin extends Plugin {
@@ -61,6 +75,7 @@ export default class SidebarHubPlugin extends Plugin {
                 const handle = mount(SidebarHub, {
                     target: host,
                     props: {
+                        app: plugin.app,
                         preferences: plugin.preferences,
                         translations,
                         instanceId: crypto.randomUUID(),

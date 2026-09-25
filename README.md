@@ -9,10 +9,11 @@ The plugin is being implemented incrementally through [GitHub Issues](https://gi
 - one Dock entry in the upper-left area;
 - a compact calendar shell with the Today action inside its header;
 - bookmarks, tags, databases, and pages tabs in a fixed order;
+- a searchable, sortable, refreshable bookmark list that locates target blocks;
 - tab visibility settings that always keep at least one tab visible;
 - persisted active-tab and visibility preferences.
 
-The real data sources and navigation behavior for daily notes and each content tab will be connected in later issues.
+The real data sources and navigation behavior for daily notes, tags, databases, and pages will be connected in later issues.
 
 ## Development
 
@@ -27,6 +28,7 @@ Before handing off changes, run:
 
 ```bash
 pnpm run check
+pnpm test
 pnpm run build
 ```
 
