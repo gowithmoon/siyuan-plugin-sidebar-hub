@@ -1,4 +1,4 @@
-import { Plugin, showMessage } from "siyuan";
+import { Plugin, Setting, showMessage } from "siyuan";
 import { mount, unmount } from "svelte";
 
 import SidebarHub from "./sidebar-hub/sidebar-hub.svelte";
@@ -40,6 +40,7 @@ export default class SidebarHubPlugin extends Plugin {
         this.preferences = normalizePreferences(await this.loadData(PREFERENCES_FILE));
 
         const translations = this.i18n.sidebarHub as unknown as SidebarHubTranslations;
+        this.setting = new Setting({});
         this.registerSettings(translations);
 
         const plugin = this;
