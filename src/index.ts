@@ -39,8 +39,12 @@ interface SidebarHubTranslations {
     calendar: string;
     weekdays: string[];
     today: string;
-    previousMonth: string;
-    nextMonth: string;
+    year: string;
+    month: string;
+    previousDay: string;
+    nextDay: string;
+    noPreviousDailyNote: string;
+    noNextDailyNote: string;
     dailyNoteExists: string;
     minimize: string;
     createDailyNoteTitle: string;
@@ -160,7 +164,7 @@ export default class SidebarHubPlugin extends Plugin {
             config: {
                 position: "LeftTop",
                 size: { width: 320, height: 0 },
-                icon: "iconCalendar",
+                icon: "iconLayoutGrid",
                 title: translations.title,
             },
             data: {},

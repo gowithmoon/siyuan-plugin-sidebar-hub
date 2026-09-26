@@ -28,7 +28,12 @@ export interface DailyNoteMonth {
 }
 
 export type DailyNoteOpenResult = "opened" | "cancelled" | "created";
-export type DailyNoteErrorCode = "notebook-unconfigured" | "notebook-closed" | "date-creation-unsupported";
+export type DailyNoteDirection = "previous" | "next";
+export type DailyNoteErrorCode =
+    | "notebook-unconfigured"
+    | "notebook-closed"
+    | "date-creation-unsupported"
+    | "no-adjacent-note";
 
 interface DailyNotebookDependencies {
     listNotebooks: () => Promise<DailyNoteNotebook[]>;
@@ -48,6 +53,7 @@ interface DailyNoteDependencies extends DailyNotebookDependencies {
 export interface DailyNoteNavigator {
     loadMonth(year: number, month: number): Promise<DailyNoteMonth>;
     openDate(date: string): Promise<DailyNoteOpenResult>;
+    openAdjacentDate(date: string, direction: DailyNoteDirection): Promise<string>;
     invalidate(): void;
 }
 
@@ -107,6 +113,18 @@ export function createDailyNoteNavigator(dependencies: DailyNoteDependencies): D
             index[date] = documentId;
             await dependencies.open(documentId);
             return "created";
+        },
+        async openAdjacentDate(date, direction) {
+            const notebookId = await requireAvailableNotebook();
+            const index = await loadIndex(notebookId);
+            const adjacent = Object.keys(index)
+                .filter((candidate) => direction === "previous" ? candidate < date : candidate > date)
+                .sort((left, right) => direction === "previous" ? right.localeCompare(left) : left.localeCompare(right))[0];
+            if (!adjacent) {
+                throw new DailyNoteNavigationError("no-adjacent-note");
+            }
+            await dependencies.open(index[adjacent]);
+            return adjacent;
         },
         invalidate() {
             indexedNotebookId = "";

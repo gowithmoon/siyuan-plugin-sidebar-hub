@@ -18,7 +18,11 @@
     import { loadDatabaseCount, loadDatabases, openDatabase } from "./database-siyuan";
     import { createPageSource } from "./pages";
     import { loadPageBlockAttrs, loadPageDocRefCounts, loadPageDocuments, loadPageNotebooks, openPage } from "./page-siyuan";
-    import { createDailyNoteNavigator, DailyNoteNavigationError } from "./daily-notes";
+    import {
+        createDailyNoteNavigator,
+        DailyNoteNavigationError,
+        type DailyNoteDirection,
+    } from "./daily-notes";
     import {
         confirmDailyNoteCreation,
         createTodayDailyNote,
@@ -55,8 +59,12 @@
         calendar: string;
         weekdays: string[];
         today: string;
-        previousMonth: string;
-        nextMonth: string;
+        year: string;
+        month: string;
+        previousDay: string;
+        nextDay: string;
+        noPreviousDailyNote: string;
+        noNextDailyNote: string;
         dailyNoteExists: string;
         minimize: string;
         createDailyNoteTitle: string;
@@ -99,6 +107,8 @@
         onTagCollapsedChange,
     }: Props = $props();
     const today = new Date();
+    const years = Array.from({ length: 201 }, (_, index) => 1900 + index);
+    const months = Array.from({ length: 12 }, (_, index) => index);
     const bookmarkSource = createBookmarkSource({
         load: loadBookmarkGroups,
         open: (blockId) => openBookmark(app, blockId),
@@ -182,11 +192,10 @@
         onSortChange(tabId, sort as EntrySourceSort<SidebarHubSortField>);
     }
 
-    function moveMonth(offset: number) {
-        const nextMonth = new Date(visibleYear, visibleMonth + offset, 1);
-        visibleYear = nextMonth.getFullYear();
-        visibleMonth = nextMonth.getMonth();
-        focusedDate = toDateKey(nextMonth);
+    function changeVisibleDate(year: number, month: number) {
+        visibleYear = year;
+        visibleMonth = month;
+        focusedDate = toDateKey(new Date(year, month, 1));
     }
 
     function returnToToday() {
@@ -199,6 +208,22 @@
     function selectDate(date: string) {
         focusedDate = date;
         void openCalendarDate(date);
+    }
+
+    async function openAdjacentDailyNote(direction: DailyNoteDirection) {
+        if (openingDate) {
+            return;
+        }
+        openingDate = true;
+        try {
+            const date = await dailyNoteNavigator.openAdjacentDate(selectedDate || toDateKey(today), direction);
+            selectedDate = date;
+            focusCalendarDate(date);
+        } catch (error) {
+            showMessage(dailyNoteErrorMessage(error, direction), 6000, "error");
+        } finally {
+            openingDate = false;
+        }
     }
 
     function handleCalendarKeydown(event: KeyboardEvent, date: string) {
@@ -305,13 +330,18 @@
         }
     }
 
-    function dailyNoteErrorMessage(error: unknown) {
+    function dailyNoteErrorMessage(error: unknown, direction?: DailyNoteDirection) {
         if (error instanceof DailyNoteNavigationError) {
             if (error.code === "notebook-unconfigured") {
                 return translations.dailyNotebookRequired;
             }
             if (error.code === "notebook-closed") {
                 return translations.dailyNotebookClosed;
+            }
+            if (error.code === "no-adjacent-note") {
+                return direction === "previous"
+                    ? translations.noPreviousDailyNote
+                    : translations.noNextDailyNote;
             }
             return translations.dateCreationUnsupported;
         }
@@ -320,22 +350,32 @@
 </script>
 
 <div class="sidebar-hub fn__flex-column" data-sidebar-hub-instance={instanceId}>
-    <div class="block__icons">
-        <div class="block__logo">
-            <svg class="block__logoicon" aria-hidden="true"><use href="#iconCalendar"></use></svg>
-            {translations.title}
-        </div>
-        <span class="fn__flex-1 fn__space"></span>
-        <button type="button" data-type="min" class="block__icon ariaLabel" data-position="north" aria-label={translations.minimize}>
-            <svg aria-hidden="true"><use href="#iconMin"></use></svg>
-        </button>
-    </div>
-
     <section class="sidebar-hub__calendar" aria-label={translations.calendar}>
         <div class="sidebar-hub__calendar-header">
-            <strong aria-live="polite">{calendar.year} / {String(calendar.month + 1).padStart(2, "0")}</strong>
+            <div class="sidebar-hub__calendar-selectors">
+                <select
+                    class="b3-select sidebar-hub__calendar-select sidebar-hub__calendar-select--year"
+                    aria-label={translations.year}
+                    value={visibleYear}
+                    onchange={(event) => changeVisibleDate(Number(event.currentTarget.value), visibleMonth)}
+                >
+                    {#each years as year}
+                        <option value={year}>{year}</option>
+                    {/each}
+                </select>
+                <select
+                    class="b3-select sidebar-hub__calendar-select sidebar-hub__calendar-select--month"
+                    aria-label={translations.month}
+                    value={visibleMonth}
+                    onchange={(event) => changeVisibleDate(visibleYear, Number(event.currentTarget.value))}
+                >
+                    {#each months as month}
+                        <option value={month}>{String(month + 1).padStart(2, "0")}</option>
+                    {/each}
+                </select>
+            </div>
             <div class="sidebar-hub__calendar-navigation">
-                <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south" aria-label={translations.previousMonth} onclick={() => moveMonth(-1)}>
+                <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south" aria-label={translations.previousDay} onclick={() => openAdjacentDailyNote("previous")}>
                     <svg aria-hidden="true"><use href="#iconLeft"></use></svg>
                 </button>
                 <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south" aria-label={translations.today} onclick={returnToToday}>
@@ -343,10 +383,13 @@
                         <path d="M12 3 3 10v11h7v-7h4v7h7V10L12 3Z"></path>
                     </svg>
                 </button>
-                <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south" aria-label={translations.nextMonth} onclick={() => moveMonth(1)}>
+                <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south" aria-label={translations.nextDay} onclick={() => openAdjacentDailyNote("next")}>
                     <svg aria-hidden="true"><use href="#iconRight"></use></svg>
                 </button>
             </div>
+            <button type="button" data-type="min" class="block__icon ariaLabel sidebar-hub__minimize" data-position="south" aria-label={translations.minimize}>
+                <svg aria-hidden="true"><use href="#iconMin"></use></svg>
+            </button>
         </div>
 
         <div class="sidebar-hub__weekdays" aria-hidden="true">

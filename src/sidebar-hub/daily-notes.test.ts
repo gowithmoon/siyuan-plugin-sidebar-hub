@@ -51,6 +51,32 @@ describe("日记导航", () => {
         expect(confirmCreate).not.toHaveBeenCalled();
     });
 
+    it("按方向跳过缺失日期并打开最近的已有日记", async () => {
+        const open = vi.fn();
+        const confirmCreate = vi.fn();
+        const createToday = vi.fn();
+        const navigator = createNavigator({ open, confirmCreate, createToday });
+
+        await expect(navigator.openAdjacentDate("2026-11-25", "previous")).resolves.toBe("2026-11-20");
+        await expect(navigator.openAdjacentDate("2026-11-25", "next")).resolves.toBe("2026-12-03");
+
+        expect(open).toHaveBeenNthCalledWith(1, "previous");
+        expect(open).toHaveBeenNthCalledWith(2, "next-near");
+        expect(confirmCreate).not.toHaveBeenCalled();
+        expect(createToday).not.toHaveBeenCalled();
+    });
+
+    it("目标方向没有已有日记时返回边界错误", async () => {
+        const navigator = createNavigator();
+
+        await expect(navigator.openAdjacentDate("2026-08-01", "previous")).rejects.toEqual(
+            new DailyNoteNavigationError("no-adjacent-note"),
+        );
+        await expect(navigator.openAdjacentDate("2027-01-01", "next")).rejects.toEqual(
+            new DailyNoteNavigationError("no-adjacent-note"),
+        );
+    });
+
     it("缺失的今日日记只有确认后才使用官方能力创建并打开", async () => {
         const createToday = vi.fn().mockResolvedValue("created");
         const open = vi.fn();
@@ -99,17 +125,29 @@ describe("日记导航", () => {
 function createNavigator(overrides: Record<string, unknown> = {}) {
     const documents: Record<string, DailyNoteDocument[]> = {
         "/": [{ id: "folder", path: "/folder.sy", name: "daily", subFileCount: 1 }],
-        "/folder.sy": [{ id: "existing", path: "/folder/existing.sy", name: "2026-09-25", subFileCount: 0 }],
+        "/folder.sy": [
+            { id: "previous-far", path: "/folder/previous-far.sy", name: "2026-10-20", subFileCount: 0 },
+            { id: "previous", path: "/folder/previous.sy", name: "2026-11-20", subFileCount: 0 },
+            { id: "existing", path: "/folder/existing.sy", name: "2026-09-25", subFileCount: 0 },
+            { id: "next", path: "/folder/next.sy", name: "2026-10-03", subFileCount: 0 },
+            { id: "next-near", path: "/folder/next-near.sy", name: "2026-12-03", subFileCount: 0 },
+            { id: "next-far", path: "/folder/next-far.sy", name: "2026-12-10", subFileCount: 0 },
+        ],
+    };
+    const attributes: Record<string, Record<string, string>> = {
+        "previous-far": { "custom-dailynote-20261020": "20261020" },
+        previous: { "custom-dailynote-20261120": "20261120" },
+        existing: { "custom-dailynote-20260925": "20260925" },
+        next: { "custom-dailynote-20261003": "20261003" },
+        "next-near": { "custom-dailynote-20261203": "20261203" },
+        "next-far": { "custom-dailynote-20261210": "20261210" },
     };
     return createDailyNoteNavigator({
         selectedNotebookId: () => "daily",
         listNotebooks: vi.fn().mockResolvedValue(notebooks),
         getNotebookConfig: vi.fn().mockResolvedValue({ dailyNoteSavePath: "/daily/{{now | date \"2006-01-02\"}}" }),
         listDocuments: vi.fn(async (_notebookId: string, path: string) => documents[path] ?? []),
-        getBlockAttrs: vi.fn(async (ids: string[]) => Object.fromEntries(ids.map((id) => [
-            id,
-            id === "existing" ? { "custom-dailynote-20260925": "20260925" } : {},
-        ]))),
+        getBlockAttrs: vi.fn(async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, attributes[id] ?? {}]))),
         confirmCreate: vi.fn().mockResolvedValue(true),
         createToday: vi.fn().mockResolvedValue("created"),
         open: vi.fn(),

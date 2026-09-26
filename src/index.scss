@@ -23,26 +23,44 @@
 }
 
 .sidebar-hub__calendar-header {
-    position: relative;
-    display: grid;
-    grid-template-columns: 1fr;
+    display: flex;
     align-items: center;
+    gap: 4px;
     margin-bottom: 6px;
 }
 
-.sidebar-hub__calendar-header strong {
+.sidebar-hub__calendar-selectors {
+    display: flex;
+    flex: 0 0 auto;
     min-width: 0;
+    gap: 2px;
+}
+
+.sidebar-hub__calendar-select {
+    height: 28px;
+    padding: 0 4px;
+    border: 0;
+    color: inherit;
+    background: transparent;
+    font: inherit;
     font-size: 14px;
     font-weight: 600;
 }
 
+.sidebar-hub__calendar-select--year {
+    width: 72px;
+}
+
+.sidebar-hub__calendar-select--month {
+    width: 52px;
+}
+
 .sidebar-hub__calendar-navigation {
-    position: absolute;
-    left: 50%;
     display: flex;
+    flex: 1 1 auto;
     align-items: center;
+    justify-content: center;
     gap: 2px;
-    transform: translateX(-50%);
 }
 
 .sidebar-hub__calendar-header .block__icon {
@@ -54,10 +72,18 @@
     background: transparent;
 }
 
+.sidebar-hub__minimize {
+    flex: 0 0 28px;
+}
+
 .sidebar-hub__calendar-header .block__icon:hover,
 .sidebar-hub__day:hover {
     color: var(--b3-theme-on-background);
     background: var(--b3-list-hover);
+}
+
+.sidebar-hub__calendar-select:focus-visible {
+    outline-offset: -2px;
 }
 
 .sidebar-hub__weekdays,
