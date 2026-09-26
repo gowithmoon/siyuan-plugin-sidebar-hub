@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "path";
 import { defineConfig, type Plugin } from "vite";
 import { viteStaticCopy } from "vite-plugin-static-copy";
@@ -13,14 +12,6 @@ const env = process.env;
 const isSrcmap = env.VITE_SOURCEMAP === "inline";
 const isDev = env.NODE_ENV === "development";
 const outputDir = isDev ? "dev" : "dist";
-const pluginManifest = JSON.parse(readFileSync(resolve(import.meta.dirname, "plugin.json"), "utf8"));
-const packageImageTargets = [
-    ["icon", "icon.png"],
-    ["preview", "preview.png"],
-].flatMap(([field, legacyName]) => {
-    const fileName = pluginManifest[field] || (existsSync(legacyName) ? legacyName : "");
-    return fileName ? [{ src: `./${fileName}`, dest: "./" }] : [];
-});
 console.log("isDev=>", isDev);
 console.log("isSrcmap=>", isSrcmap);
 console.log("outputDir=>", outputDir);
@@ -41,9 +32,7 @@ export default defineConfig({
 
         viteStaticCopy({
             targets: [
-                ...packageImageTargets,
                 { src: "./README*.md", dest: "./" },
-                { src: "./asset/*", dest: "./asset", rename: { stripBase: true } },
                 { src: "./plugin.json", dest: "./" },
             ],
         }),

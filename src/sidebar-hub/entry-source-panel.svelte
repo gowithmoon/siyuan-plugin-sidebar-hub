@@ -126,6 +126,7 @@
     </label>
     <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south"
         aria-label={`${translations.sortLabel}：${translations.sortOptions[runtimeState.sort.field] ?? runtimeState.sort.field}`}
+        aria-haspopup="menu"
         onclick={openSortMenu}>
         <svg aria-hidden="true"><use href="#iconSort"></use></svg>
     </button>
@@ -141,12 +142,12 @@
 </div>
 
 {#if runtimeState.snapshot.status === "loading" && runtimeState.snapshot.sections.length === 0}
-    <div class="sidebar-hub__state" role="status">
+    <div class="sidebar-hub__state" role="status" aria-live="polite">
         <svg class="fn__rotate" aria-hidden="true"><use href="#iconRefresh"></use></svg>
         <p>{translations.loading}</p>
     </div>
 {:else if runtimeState.snapshot.status === "error"}
-    <div class="sidebar-hub__state" role="alert">
+    <div class="sidebar-hub__state" role="alert" aria-live="assertive">
         <svg aria-hidden="true"><use href="#iconInfo"></use></svg>
         <p>{translations.loadError}</p>
         {#if runtimeState.snapshot.error && runtimeState.snapshot.error !== translations.loadError}
@@ -155,13 +156,13 @@
         <button type="button" class="b3-button b3-button--outline" onclick={() => runtime.refresh()}>{translations.retry}</button>
     </div>
 {:else if runtimeState.snapshot.status === "ready" && runtimeState.snapshot.sections.length === 0}
-    <div class="sidebar-hub__state">
+    <div class="sidebar-hub__state" role="status" aria-live="polite">
         <svg aria-hidden="true"><use href={`#${emptyIcon}`}></use></svg>
         <p>{runtimeState.query.trim() ? translations.noMatches : translations.empty}</p>
     </div>
 {:else}
     {#if runtimeState.snapshot.status === "loading" && runtimeState.snapshot.progress && translations.progress}
-        <div class="sidebar-hub__progress" role="status">{progressLabel()}</div>
+        <div class="sidebar-hub__progress" role="status" aria-live="polite">{progressLabel()}</div>
     {/if}
     <div class="sidebar-hub__entry-list" aria-busy={runtimeState.snapshot.status === "loading"}>
         {#each runtimeState.snapshot.sections as section (section.key)}

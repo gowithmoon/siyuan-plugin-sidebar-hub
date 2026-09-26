@@ -36,9 +36,12 @@ interface SidebarHubHandle {
 
 interface SidebarHubTranslations {
     title: string;
+    calendar: string;
+    weekdays: string[];
     today: string;
     previousMonth: string;
     nextMonth: string;
+    dailyNoteExists: string;
     minimize: string;
     createDailyNoteTitle: string;
     createDailyNoteMessage: string;

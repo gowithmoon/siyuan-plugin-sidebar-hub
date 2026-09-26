@@ -10,7 +10,8 @@
     background: var(--b3-theme-background);
 }
 
-.sidebar-hub button:focus-visible {
+.sidebar-hub button:focus-visible,
+.sidebar-hub input:focus-visible {
     outline: 2px solid var(--b3-theme-primary);
     outline-offset: -2px;
 }
@@ -176,6 +177,10 @@
     flex: 1 1 auto;
     min-height: 0;
     flex-direction: column;
+}
+
+.sidebar-hub__source-panel[hidden] {
+    display: none;
 }
 
 .sidebar-hub__tools {

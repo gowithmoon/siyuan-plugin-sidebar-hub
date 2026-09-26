@@ -48,9 +48,12 @@
 
     interface Translations {
         title: string;
+        calendar: string;
+        weekdays: string[];
         today: string;
         previousMonth: string;
         nextMonth: string;
+        dailyNoteExists: string;
         minimize: string;
         createDailyNoteTitle: string;
         createDailyNoteMessage: string;
@@ -110,6 +113,7 @@
     let visibleYear = $state(today.getFullYear());
     let visibleMonth = $state(today.getMonth());
     let selectedDate = $state("");
+    let focusedDate = $state(toDateKey(today));
     let dailyNoteDates = $state<Record<string, string>>({});
     let openingDate = $state(false);
     let bookmarkPanel: EntrySourcePanelHandle;
@@ -172,16 +176,84 @@
         const nextMonth = new Date(visibleYear, visibleMonth + offset, 1);
         visibleYear = nextMonth.getFullYear();
         visibleMonth = nextMonth.getMonth();
+        focusedDate = toDateKey(nextMonth);
     }
 
     function returnToToday() {
         visibleYear = today.getFullYear();
         visibleMonth = today.getMonth();
+        focusedDate = toDateKey(today);
         void openCalendarDate(toDateKey(today));
     }
 
     function selectDate(date: string) {
+        focusedDate = date;
         void openCalendarDate(date);
+    }
+
+    function handleCalendarKeydown(event: KeyboardEvent, date: string) {
+        const offsets: Partial<Record<string, number>> = {
+            ArrowLeft: -1,
+            ArrowRight: 1,
+            ArrowUp: -7,
+            ArrowDown: 7,
+        };
+        const offset = offsets[event.key];
+        if (offset === undefined) {
+            return;
+        }
+
+        event.preventDefault();
+        const target = dateFromKey(date);
+        target.setDate(target.getDate() + offset);
+        focusCalendarDate(toDateKey(target));
+    }
+
+    function focusCalendarDate(date: string) {
+        const target = dateFromKey(date);
+        focusedDate = date;
+        visibleYear = target.getFullYear();
+        visibleMonth = target.getMonth();
+        requestAnimationFrame(() => {
+            document.querySelector<HTMLButtonElement>(
+                `[data-sidebar-hub-instance="${instanceId}"] [data-calendar-date="${date}"]`,
+            )?.focus();
+        });
+    }
+
+    function dateFromKey(date: string) {
+        const [year, month, day] = date.split("-").map(Number);
+        return new Date(year, month - 1, day);
+    }
+
+    function calendarDateLabel(date: string, hasDailyNote: boolean) {
+        return hasDailyNote ? `${date}: ${translations.dailyNoteExists}` : date;
+    }
+
+    function selectTab(tabId: SidebarTabId, focus: boolean) {
+        onActiveTabChange(tabId);
+        if (focus) {
+            requestAnimationFrame(() => document.getElementById(`${instanceId}-tab-${tabId}`)?.focus());
+        }
+    }
+
+    function handleTabKeydown(event: KeyboardEvent, tabId: SidebarTabId) {
+        const currentIndex = visibleTabs.findIndex((tab) => tab.id === tabId);
+        let nextIndex = currentIndex;
+        if (event.key === "ArrowLeft") {
+            nextIndex = (currentIndex - 1 + visibleTabs.length) % visibleTabs.length;
+        } else if (event.key === "ArrowRight") {
+            nextIndex = (currentIndex + 1) % visibleTabs.length;
+        } else if (event.key === "Home") {
+            nextIndex = 0;
+        } else if (event.key === "End") {
+            nextIndex = visibleTabs.length - 1;
+        } else {
+            return;
+        }
+
+        event.preventDefault();
+        selectTab(visibleTabs[nextIndex].id, true);
     }
 
     async function loadCalendarMonth(year: number, month: number, notebookId: string) {
@@ -237,7 +309,7 @@
     }
 </script>
 
-<div class="sidebar-hub fn__flex-column">
+<div class="sidebar-hub fn__flex-column" data-sidebar-hub-instance={instanceId}>
     <div class="block__icons">
         <div class="block__logo">
             <svg class="block__logoicon" aria-hidden="true"><use href="#iconCalendar"></use></svg>
@@ -249,9 +321,9 @@
         </button>
     </div>
 
-    <section class="sidebar-hub__calendar" aria-label={translations.title}>
+    <section class="sidebar-hub__calendar" aria-label={translations.calendar}>
         <div class="sidebar-hub__calendar-header">
-            <strong>{calendar.year} / {String(calendar.month + 1).padStart(2, "0")}</strong>
+            <strong aria-live="polite">{calendar.year} / {String(calendar.month + 1).padStart(2, "0")}</strong>
             <div class="sidebar-hub__calendar-navigation">
                 <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south" aria-label={translations.previousMonth} onclick={() => moveMonth(-1)}>
                     <svg aria-hidden="true"><use href="#iconLeft"></use></svg>
@@ -268,11 +340,11 @@
         </div>
 
         <div class="sidebar-hub__weekdays" aria-hidden="true">
-            {#each ["一", "二", "三", "四", "五", "六", "日"] as weekday}
+            {#each translations.weekdays as weekday}
                 <span>{weekday}</span>
             {/each}
         </div>
-        <div class="sidebar-hub__days">
+        <div class="sidebar-hub__days" aria-busy={openingDate}>
             {#each calendar.days as day (day.date)}
                 <button
                     type="button"
@@ -281,11 +353,14 @@
                     class:sidebar-hub__day--selected={selectedDate === day.date}
                     class:sidebar-hub__day--has-note={Boolean(dailyNoteDates[day.date])}
                     class="sidebar-hub__day"
-                    aria-label={day.date}
+                    data-calendar-date={day.date}
+                    aria-label={calendarDateLabel(day.date, Boolean(dailyNoteDates[day.date]))}
+                    aria-current={day.isToday ? "date" : undefined}
                     aria-pressed={selectedDate === day.date}
-                    tabindex={day.isCurrentMonth ? 0 : -1}
+                    tabindex={focusedDate === day.date ? 0 : -1}
                     disabled={openingDate}
                     onclick={() => selectDate(day.date)}
+                    onkeydown={(event) => handleCalendarKeydown(event, day.date)}
                 >
                     {day.day}
                 </button>
@@ -302,17 +377,24 @@
                 class="sidebar-hub__tab"
                 role="tab"
                 aria-selected={preferences.activeTab === tab.id}
-                aria-controls={`${instanceId}-panel`}
+                aria-controls={`${instanceId}-panel-${tab.id}`}
                 tabindex={preferences.activeTab === tab.id ? 0 : -1}
-                onclick={() => onActiveTabChange(tab.id)}
+                onclick={() => selectTab(tab.id, false)}
+                onkeydown={(event) => handleTabKeydown(event, tab.id)}
             >
                 {translations.tabs[tab.id]}
             </button>
         {/each}
     </div>
 
-    <div id={`${instanceId}-panel`} class="sidebar-hub__content fn__flex-1" role="tabpanel" aria-labelledby={`${instanceId}-tab-${preferences.activeTab}`}>
-        <div class:fn__none={preferences.activeTab !== "bookmarks"} class="sidebar-hub__source-panel">
+    <div class="sidebar-hub__content fn__flex-1">
+        <div
+            id={`${instanceId}-panel-bookmarks`}
+            class="sidebar-hub__source-panel"
+            role="tabpanel"
+            aria-labelledby={`${instanceId}-tab-bookmarks`}
+            hidden={preferences.activeTab !== "bookmarks"}
+        >
             <EntrySourcePanel
                 bind:this={bookmarkPanel}
                 source={bookmarkSource}
@@ -324,7 +406,13 @@
                 onSortChange={(sort) => persistSort("bookmarks", sort)}
             />
         </div>
-        <div class:fn__none={preferences.activeTab !== "tags"} class="sidebar-hub__source-panel">
+        <div
+            id={`${instanceId}-panel-tags`}
+            class="sidebar-hub__source-panel"
+            role="tabpanel"
+            aria-labelledby={`${instanceId}-tab-tags`}
+            hidden={preferences.activeTab !== "tags"}
+        >
             <EntrySourcePanel
                 bind:this={tagPanel}
                 source={tagSource}
@@ -337,7 +425,13 @@
                 onSortChange={(sort) => persistSort("tags", sort)}
             />
         </div>
-        <div class:fn__none={preferences.activeTab !== "databases"} class="sidebar-hub__source-panel">
+        <div
+            id={`${instanceId}-panel-databases`}
+            class="sidebar-hub__source-panel"
+            role="tabpanel"
+            aria-labelledby={`${instanceId}-tab-databases`}
+            hidden={preferences.activeTab !== "databases"}
+        >
             <EntrySourcePanel
                 bind:this={databasePanel}
                 source={databaseSource}
@@ -350,7 +444,13 @@
                 onSortChange={(sort) => persistSort("databases", sort)}
             />
         </div>
-        <div class:fn__none={preferences.activeTab !== "pages"} class="sidebar-hub__source-panel">
+        <div
+            id={`${instanceId}-panel-pages`}
+            class="sidebar-hub__source-panel"
+            role="tabpanel"
+            aria-labelledby={`${instanceId}-tab-pages`}
+            hidden={preferences.activeTab !== "pages"}
+        >
             <EntrySourcePanel
                 bind:this={pagePanel}
                 source={pageSource}

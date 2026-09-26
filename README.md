@@ -4,7 +4,7 @@
 
 Sidebar Hub is a desktop SiYuan plugin that brings daily notes, bookmarks, tags, databases, and regular pages into one left-side Dock while keeping SiYuan's built-in sidebar panels available.
 
-The plugin is being implemented incrementally through [GitHub Issues](https://github.com/gowithmoon/siyuan-plugin-sidebar-hub/issues). The current foundation includes:
+The first release includes:
 
 - one Dock entry in the upper-left area;
 - a compact calendar that marks and opens existing daily notes, with the Today action inside its header;
@@ -13,7 +13,10 @@ The plugin is being implemented incrementally through [GitHub Issues](https://gi
 - a regular-page list that scans open notebooks while excluding daily notes and their path ancestors;
 - a single daily-note notebook setting and confirmed creation of today's note through SiYuan's native API;
 - tab visibility settings that always keep at least one tab visible;
-- persisted active-tab and visibility preferences.
+- persisted active-tab, visibility, and per-tab sorting preferences;
+- light and dark theme support plus keyboard access to tabs, dates, tools, and entries.
+
+Missing daily notes for today can be created through SiYuan's native flow after confirmation. Missing past or future daily notes are not created.
 
 ## Development
 
