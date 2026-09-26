@@ -58,11 +58,33 @@ jobs:
       - name: Check source
         run: pnpm check
 
+      - name: Test source
+        run: pnpm test
+
       - name: Build production package
+        run: pnpm build
+
+      - name: Validate production package
+        shell: bash
         run: |
-          pnpm build
-          cd dist
-          zip -r ../package.zip ./*
+          test -s package.zip
+          package_files="$(zipinfo -1 package.zip)"
+          for required_file in \
+            LICENSE \
+            README.md \
+            README.zh-CN.md \
+            icon.png \
+            preview.png \
+            i18n/en.json \
+            i18n/zh-CN.json \
+            index.css \
+            index.js \
+            plugin.json; do
+            if ! grep -Fxq "$required_file" <<< "$package_files"; then
+              echo "package.zip is missing $required_file"
+              exit 1
+            fi
+          done
 
       - name: Release
         uses: ncipollo/release-action@v1
@@ -72,3 +94,4 @@ jobs:
           artifacts: "package.zip"
           token: ${{ secrets.GITHUB_TOKEN }}
           prerelease: false
+          generateReleaseNotes: true

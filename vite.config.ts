@@ -32,6 +32,9 @@ export default defineConfig({
 
         viteStaticCopy({
             targets: [
+                { src: "./icon.png", dest: "./" },
+                { src: "./preview.png", dest: "./" },
+                { src: "./LICENSE", dest: "./" },
                 { src: "./README*.md", dest: "./" },
                 { src: "./plugin.json", dest: "./" },
             ],
@@ -65,6 +68,9 @@ export default defineConfig({
                 useLiveReload({ outputDir }),
                 watchExternalFiles([
                     "public/i18n/**",
+                    "./icon.png",
+                    "./preview.png",
+                    "./LICENSE",
                     "./README*.md",
                     "./plugin.json"
                 ])

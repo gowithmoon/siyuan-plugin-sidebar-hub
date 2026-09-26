@@ -2,7 +2,7 @@
   "name": "siyuan-plugin-sidebar-hub",
   "author": "gowithmoon",
   "url": "https://github.com/gowithmoon/siyuan-plugin-sidebar-hub",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "minAppVersion": "3.8.0",
   "kernels": [],
   "disabledInPublish": true,
@@ -24,6 +24,8 @@
     "default": "README.md",
     "zh-CN": "README.zh-CN.md"
   },
+  "icon": "icon.png",
+  "preview": "preview.png",
   "funding": {
     "openCollective": "",
     "patreon": "",
@@ -32,11 +34,20 @@
   },
   "keywords": [
     "sidebar",
+    "navigation",
+    "calendar",
     "daily-note",
     "bookmark",
     "tag",
     "database",
+    "page",
     "侧边栏",
-    "日记"
+    "导航",
+    "日历",
+    "日记",
+    "书签",
+    "标签",
+    "数据库",
+    "页面"
   ]
 }
