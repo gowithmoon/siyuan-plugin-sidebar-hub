@@ -65,6 +65,8 @@ function buildBookmarkSections(
             return {
                 key: group.name,
                 label: group.name,
+                count: group.blocks.length,
+                countable: true,
                 entries: visibleEntries
                     .sort((left, right) => compareRecords(left, right, input.sort.field) * direction)
                     .map(({ key, label, icon }) => ({ key, label, icon })),

@@ -27,6 +27,18 @@ const tags: TagNode[] = [
 const input = { query: "", sort: { field: "name", direction: "asc" } } as const;
 
 describe("标签导航", () => {
+    it("显示真实标签的零值，虚拟父标签不显示计数", async () => {
+        const source = createTagSource({ load: vi.fn().mockResolvedValue([
+            { name: "空标签", label: "空标签", count: 0, children: [] },
+            { name: "父", label: "父", count: 0, children: [{ name: "子", label: "父/子", count: 2, children: [] }] },
+        ]), open: vi.fn() });
+        const entries = (await source.query(input)).sections[0].entries;
+        expect(entries.find((entry) => entry.label === "空标签")).toMatchObject({ count: 0, countable: true });
+        const parent = entries.find((entry) => entry.label === "父");
+        expect(parent).toMatchObject({ countable: false });
+        expect(parent?.children?.[0]).toMatchObject({ label: "子", count: 2, countable: true });
+    });
+
     it("生成思源原生标签搜索关键词", () => {
         expect(tagSearchKeyword("项目/开发")).toBe("#项目/开发#");
     });

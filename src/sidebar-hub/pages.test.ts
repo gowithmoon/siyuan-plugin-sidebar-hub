@@ -24,6 +24,48 @@ const trees: Record<string, PageDocument[]> = {
 const sort = { field: "name", direction: "asc" } as const;
 
 describe("普通页面来源", () => {
+    it("列表就绪后批量加载文档引用数量，并保留零值", async () => {
+        const getDocRefCounts = vi.fn().mockResolvedValue({ reading: 0, "journal-other": 3 });
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(2)),
+            listDocuments: vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []),
+            getBlockAttrs: vi.fn(async () => ({})),
+            getDocRefCounts,
+            open: vi.fn(),
+        });
+        const updates: number[][] = [];
+        await source.query({ query: "", sort }, (next) => {
+            updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.count ?? -1)));
+        });
+
+        await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledWith(["reading", "journal-other"]));
+        expect(updates[updates.length - 1]).toEqual([3, 0]);
+    });
+
+    it("切换离开再回来时不会丢失已经完成的批量计数", async () => {
+        let resolveCounts: ((value: Record<string, number>) => void) | undefined;
+        const getDocRefCounts = vi.fn(() => new Promise<Record<string, number>>((resolve) => {
+            resolveCounts = resolve;
+        }));
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(2)),
+            listDocuments: vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []),
+            getBlockAttrs: vi.fn(async () => ({})),
+            getDocRefCounts,
+            open: vi.fn(),
+        });
+        const updates: number[][] = [];
+        source.setCountEnabled(true);
+        await source.query({ query: "", sort }, (next) => {
+            updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.count ?? -1)));
+        });
+        source.setCountEnabled(false);
+        resolveCounts!({ reading: 4, "journal-other": 0 });
+        await Promise.resolve();
+        source.setCountEnabled(true);
+        expect(updates[updates.length - 1]).toEqual([0, 4]);
+    });
+
     it("递归扫描已打开笔记本，渐进呈现结果和进度，并排除日记及其祖先", async () => {
         const listDocuments = vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []);
         const source = createPageSource({

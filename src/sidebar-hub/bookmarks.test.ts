@@ -58,6 +58,7 @@ describe("书签导航", () => {
             {
                 key: "参考",
                 label: "参考",
+                count: 2,
                 entries: [
                     { key: "20260925100000-aaaaaaa", label: "API 索引", icon: "iconBookmark" },
                     { key: "20260924100000-bbbbbbb", label: "插件开发记录", icon: "iconFile" },

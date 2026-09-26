@@ -26,6 +26,11 @@ interface ApiDocument {
     mtime: number;
 }
 
+interface ApiDocInfo {
+    id: string;
+    refCount: number;
+}
+
 export async function loadPageNotebooks(): Promise<PageNotebook[]> {
     const response = await request<ListNotebooksResponse>("/api/notebook/lsNotebooks", {});
     if (!response.ok) {
@@ -70,6 +75,21 @@ export async function loadPageBlockAttrs(ids: string[]): Promise<Record<string, 
     return Object.fromEntries(
         Object.entries(response.data ?? {}).map(([id, attrs]) => [id, attrs ?? {}]),
     );
+}
+
+export async function loadPageDocRefCounts(ids: string[]): Promise<Record<string, number>> {
+    if (ids.length === 0) {
+        return {};
+    }
+    const response = await request<Array<ApiDocInfo | null>>("/api/block/getDocsInfo", {
+        ids,
+        refCount: true,
+        av: false,
+    });
+    if (!response.ok) {
+        throw new Error(response.raw.msg || "Unable to load page reference counts");
+    }
+    return Object.fromEntries((response.data ?? []).flatMap((info) => info ? [[info.id, info.refCount]] : []));
 }
 
 export async function openPage(app: App, documentId: string) {

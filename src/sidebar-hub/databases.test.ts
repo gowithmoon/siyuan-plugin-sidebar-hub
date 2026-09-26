@@ -53,6 +53,39 @@ const results: DatabaseSearchResult[] = [
 const sort = { field: "name", direction: "asc" } as const;
 
 describe("数据库导航", () => {
+    it("异步加载每个数据库的主键总数，且最多四个请求并发", async () => {
+        let active = 0;
+        let peak = 0;
+        const count = vi.fn(async (avID: string) => {
+            active += 1;
+            peak = Math.max(peak, active);
+            await Promise.resolve();
+            active -= 1;
+            return avID === "av-projects" ? 0 : 12;
+        });
+        const source = createDatabaseSource({ load: vi.fn().mockResolvedValue(results), count, open: vi.fn() });
+        const updates: number[][] = [];
+        const snapshot = await source.query({ query: "", sort }, (next) => {
+            updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.count ?? -1)));
+        });
+
+        expect(snapshot.sections[0].entries.every((entry) => entry.count === undefined)).toBe(true);
+        await vi.waitFor(() => expect(count).toHaveBeenCalledTimes(2));
+        expect(peak).toBeLessThanOrEqual(4);
+        expect(updates[updates.length - 1]).toEqual([12, 0]);
+    });
+
+    it("停用来源时不启动计数，重新激活后才补齐", async () => {
+        const count = vi.fn().mockResolvedValue(1);
+        const source = createDatabaseSource({ load: vi.fn().mockResolvedValue(results), count, open: vi.fn() });
+        source.setCountEnabled(false);
+        await source.query({ query: "", sort });
+        await Promise.resolve();
+        expect(count).not.toHaveBeenCalled();
+        source.setCountEnabled(true);
+        await vi.waitFor(() => expect(count).toHaveBeenCalledTimes(2));
+    });
+
     it("按数据库 ID 合并不同视图，只展示数据库名称", async () => {
         const source = createDatabaseSource({ load: vi.fn().mockResolvedValue(results), open: vi.fn() });
 

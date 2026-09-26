@@ -28,6 +28,7 @@ interface PageDependencies {
     listNotebooks: () => Promise<PageNotebook[]>;
     listDocuments: (notebookId: string, path: string) => Promise<PageDocument[]>;
     getBlockAttrs: (ids: string[]) => Promise<Record<string, Record<string, string>>>;
+    getDocRefCounts?: (ids: string[]) => Promise<Record<string, number>>;
     open: (documentId: string) => Promise<void> | void;
 }
 
@@ -40,6 +41,11 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
     let generation = 0;
     let queryVersion = 0;
     let snapshot: EntrySourceSnapshot = { status: "idle", sections: [] };
+    let countCache = new Map<string, number>();
+    let countGeneration = -1;
+    let currentInput: EntrySourceQuery<PageSortField> | undefined;
+    let currentUpdate: ((snapshot: EntrySourceSnapshot) => void) | undefined;
+    let countEnabled = true;
 
     return {
         sortFields: PAGE_SORT_FIELDS,
@@ -48,8 +54,12 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
         },
         async query(input, onUpdate) {
             const requestVersion = ++queryVersion;
+            currentInput = input;
+            currentUpdate = onUpdate;
             if (cached) {
-                snapshot = { status: "ready", sections: buildPageSections(cached, input) };
+                snapshot = { status: "ready", sections: buildPageSections(cached, input, countCache) };
+                onUpdate?.(snapshot);
+                startCounts(cached, generation);
                 return snapshot;
             }
 
@@ -65,7 +75,7 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
                 }
                 snapshot = {
                     status: "loading",
-                    sections: buildPageSections(records, input),
+                    sections: buildPageSections(records, input, countCache),
                     progress: { current: scanned },
                 };
                 onUpdate?.(snapshot);
@@ -83,10 +93,11 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
                 cached = records;
                 snapshot = {
                     status: "ready",
-                    sections: buildPageSections(records, input),
+                    sections: buildPageSections(records, input, countCache),
                     progress: { current: scanned },
                 };
                 onUpdate?.(snapshot);
+                startCounts(records, requestedGeneration);
             } catch (error) {
                 if (requestVersion === queryVersion && requestedGeneration === generation) {
                     snapshot = {
@@ -131,18 +142,75 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
             generation += 1;
             queryVersion += 1;
             cached = undefined;
+            countCache = new Map();
+            countGeneration = -1;
             snapshot = { status: "idle", sections: [] };
         },
+        setCountEnabled(enabled) {
+            countEnabled = enabled;
+            if (countEnabled && cached && currentInput && snapshot.status === "ready") {
+                snapshot = {
+                    ...snapshot,
+                    sections: buildPageSections(cached, currentInput, countCache),
+                };
+                currentUpdate?.(snapshot);
+            }
+            if (countEnabled && cached) {
+                startCounts(cached, generation);
+            }
+        },
     };
+
+    function startCounts(records: PageRecord[], requestedGeneration: number) {
+        if (!countEnabled || !dependencies.getDocRefCounts || countGeneration === requestedGeneration) {
+            return;
+        }
+        countGeneration = requestedGeneration;
+        void loadCounts(records, requestedGeneration);
+    }
+
+    async function loadCounts(records: PageRecord[], requestedGeneration: number) {
+        if (!dependencies.getDocRefCounts) {
+            return;
+        }
+        try {
+            const counts = await dependencies.getDocRefCounts(records.map((record) => record.id));
+            if (requestedGeneration !== generation) {
+                return;
+            }
+            for (const [id, count] of Object.entries(counts)) {
+                countCache.set(id, count);
+            }
+            if (countEnabled && cached && currentInput && snapshot.status === "ready") {
+                snapshot = {
+                    ...snapshot,
+                    sections: buildPageSections(cached, currentInput, countCache),
+                };
+                currentUpdate?.(snapshot);
+            }
+        } catch {
+            // 失败的页面计数保持未知状态，不影响页面列表。
+        }
+    }
 }
 
-function buildPageSections(records: PageRecord[], input: EntrySourceQuery<PageSortField>): EntrySourceSection[] {
+function buildPageSections(
+    records: PageRecord[],
+    input: EntrySourceQuery<PageSortField>,
+    counts: ReadonlyMap<string, number>,
+): EntrySourceSection[] {
     const keywords = input.query.toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
     const direction = input.sort.direction === "asc" ? 1 : -1;
     const entries = records
         .filter((record) => matchesKeywords(`${record.name} ${record.notebookName}`, keywords))
         .sort((left, right) => comparePages(left, right, input.sort.field) * direction)
-        .map((record) => ({ key: record.id, label: record.name || record.id, icon: "iconFile" }));
+        .map((record) => ({
+            key: record.id,
+            label: record.name || record.id,
+            icon: "iconFile",
+            count: counts.get(record.id),
+            countable: true,
+        }));
 
     return entries.length > 0 ? [{ key: "pages", entries }] : [];
 }

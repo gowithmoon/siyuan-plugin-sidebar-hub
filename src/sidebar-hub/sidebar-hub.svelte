@@ -15,9 +15,9 @@
     import { createTagSource } from "./tags";
     import { loadTags, openTag } from "./tag-siyuan";
     import { createDatabaseSource } from "./databases";
-    import { loadDatabases, openDatabase } from "./database-siyuan";
+    import { loadDatabaseCount, loadDatabases, openDatabase } from "./database-siyuan";
     import { createPageSource } from "./pages";
-    import { loadPageBlockAttrs, loadPageDocuments, loadPageNotebooks, openPage } from "./page-siyuan";
+    import { loadPageBlockAttrs, loadPageDocRefCounts, loadPageDocuments, loadPageNotebooks, openPage } from "./page-siyuan";
     import { createDailyNoteNavigator, DailyNoteNavigationError } from "./daily-notes";
     import {
         confirmDailyNoteCreation,
@@ -109,12 +109,14 @@
     });
     const databaseSource = createDatabaseSource({
         load: loadDatabases,
+        count: loadDatabaseCount,
         open: (blockId) => openDatabase(app, blockId),
     });
     const pageSource = createPageSource({
         listNotebooks: loadPageNotebooks,
         listDocuments: loadPageDocuments,
         getBlockAttrs: loadPageBlockAttrs,
+        getDocRefCounts: loadPageDocRefCounts,
         open: (documentId) => openPage(app, documentId),
     });
     let preferences = $state<SidebarHubPreferences>();

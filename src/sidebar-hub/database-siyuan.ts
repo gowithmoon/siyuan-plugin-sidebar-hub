@@ -7,6 +7,10 @@ interface SearchAttributeViewResponse {
     results?: Array<ApiDatabaseSearchResult | null> | null;
 }
 
+interface PrimaryKeyValuesResponse {
+    total?: number;
+}
+
 interface ApiDatabaseSearchResult {
     avID: string;
     avName: string;
@@ -32,6 +36,18 @@ export async function loadDatabases(): Promise<DatabaseSearchResult[]> {
         const normalized = normalizeResult(result);
         return normalized ? [normalized] : [];
     });
+}
+
+export async function loadDatabaseCount(avID: string): Promise<number> {
+    const response = await request<PrimaryKeyValuesResponse>("/api/av/getAttributeViewPrimaryKeyValues", {
+        id: avID,
+        page: 1,
+        pageSize: 1,
+    });
+    if (!response.ok) {
+        throw new Error(response.raw.msg || "Unable to load database count");
+    }
+    return response.data?.total ?? 0;
 }
 
 export async function openDatabase(app: App, blockId: string) {

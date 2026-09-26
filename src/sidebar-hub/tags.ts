@@ -75,6 +75,7 @@ function buildTagEntry(
         label: tag.name,
         icon: "iconTag",
         count: tag.count,
+        countable: tag.count > 0 || !(tag.children?.length),
         openable: tag.count > 0,
         children: allChildren.length > 0 ? allChildren : undefined,
     };

@@ -93,6 +93,7 @@ export function createEntrySourceRuntime<TField extends string>(
         },
         async setActive(nextActive) {
             active = nextActive;
+            options.source.setCountEnabled(active);
             if (active && state.snapshot.status === "idle") {
                 await load();
             }

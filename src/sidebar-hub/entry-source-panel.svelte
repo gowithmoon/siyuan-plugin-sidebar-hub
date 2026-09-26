@@ -333,10 +333,11 @@
                     {#if collapsible}
                         <button type="button" class="sidebar-hub__section-toggle" aria-expanded={!isSectionCollapsed(section.key)} onclick={() => toggleSection(section.key)}>
                             <svg aria-hidden="true"><use href={isSectionCollapsed(section.key) ? "#iconRight" : "#iconDown"}></use></svg>
-                            <span>{section.label}</span>
+                            <span class="sidebar-hub__entry-label">{section.label}</span>
+                            {#if section.countable}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}
                         </button>
                     {:else}
-                        <h3>{section.label}</h3>
+                        <h3><span class="sidebar-hub__entry-label">{section.label}</span>{#if section.countable}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}</h3>
                     {/if}
                 {/if}
                 {#if !isSectionCollapsed(section.key)}
@@ -354,12 +355,14 @@
                                     {#if entry.openable === false}
                                         <span class="sidebar-hub__tree-label" title={entry.label}>
                                             <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
-                                            <span>{entry.label}</span>
+                                            <span class="sidebar-hub__entry-label">{entry.label}</span>
+                                            {#if entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}
                                         </span>
                                     {:else}
                                         <button type="button" class="sidebar-hub__list-item sidebar-hub__tree-label" title={entry.label} onclick={(event) => openEntryFromEvent(event, entry.key)}>
                                             <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
-                                            <span>{entry.label}</span>
+                                            <span class="sidebar-hub__entry-label">{entry.label}</span>
+                                            {#if entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}
                                         </button>
                                     {/if}
                                 </div>
@@ -373,7 +376,8 @@
                         {#each section.entries as entry (entry.key)}
                             <button type="button" class="sidebar-hub__list-item" title={entry.label} onclick={() => openEntry(entry.key)}>
                                 <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
-                                <span>{entry.label}</span>
+                                <span class="sidebar-hub__entry-label">{entry.label}</span>
+                                {#if entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}
                             </button>
                         {/each}
                     {/if}
