@@ -1,7 +1,14 @@
 <script lang="ts">
     import { showMessage, type App } from "siyuan";
 
-    import { TAB_DEFINITIONS, type SidebarHubPreferences, type SidebarTabId } from "./preferences";
+    import type { EntrySourceSort } from "./entry-source";
+    import {
+        TAB_DEFINITIONS,
+        type SidebarHubPreferences,
+        type SidebarHubSortField,
+        type SidebarTabId,
+    } from "./preferences";
+    import type { SourceInvalidation } from "./source-invalidation";
     import { buildCalendarMonth, toDateKey } from "./calendar";
     import { createBookmarkSource } from "./bookmarks";
     import { loadBookmarkGroups, openBookmark } from "./bookmark-siyuan";
@@ -65,9 +72,21 @@
         translations: Translations;
         instanceId: string;
         onActiveTabChange: (tabId: SidebarTabId) => void;
+        onSortChange: (tabId: SidebarTabId, sort: EntrySourceSort<SidebarHubSortField>) => void;
     }
 
-    let { app, preferences: initialPreferences, translations, instanceId, onActiveTabChange }: Props = $props();
+    interface EntrySourcePanelHandle {
+        invalidate: () => Promise<void>;
+    }
+
+    let {
+        app,
+        preferences: initialPreferences,
+        translations,
+        instanceId,
+        onActiveTabChange,
+        onSortChange,
+    }: Props = $props();
     const today = new Date();
     const bookmarkSource = createBookmarkSource({
         load: loadBookmarkGroups,
@@ -93,6 +112,10 @@
     let selectedDate = $state("");
     let dailyNoteDates = $state<Record<string, string>>({});
     let openingDate = $state(false);
+    let bookmarkPanel: EntrySourcePanelHandle;
+    let tagPanel: EntrySourcePanelHandle;
+    let databasePanel: EntrySourcePanelHandle;
+    let pagePanel: EntrySourcePanelHandle;
     let monthRequest = 0;
     let calendar = $derived(buildCalendarMonth(visibleYear, visibleMonth, today));
     let visibleTabs = $derived(TAB_DEFINITIONS.filter((tab) => preferences.visibleTabs[tab.id]));
@@ -129,6 +152,20 @@
             dailyNoteNavigator.invalidate();
         }
         preferences = nextPreferences;
+    }
+
+    export async function invalidateSources(invalidation: SourceInvalidation) {
+        const panels: Record<SidebarTabId, EntrySourcePanelHandle> = {
+            bookmarks: bookmarkPanel,
+            tags: tagPanel,
+            databases: databasePanel,
+            pages: pagePanel,
+        };
+        await Promise.all(invalidation.tabs.map((tabId) => panels[tabId]?.invalidate()));
+    }
+
+    function persistSort(tabId: SidebarTabId, sort: EntrySourceSort<string>) {
+        onSortChange(tabId, sort as EntrySourceSort<SidebarHubSortField>);
     }
 
     function moveMonth(offset: number) {
@@ -277,41 +314,53 @@
     <div id={`${instanceId}-panel`} class="sidebar-hub__content fn__flex-1" role="tabpanel" aria-labelledby={`${instanceId}-tab-${preferences.activeTab}`}>
         <div class:fn__none={preferences.activeTab !== "bookmarks"} class="sidebar-hub__source-panel">
             <EntrySourcePanel
+                bind:this={bookmarkPanel}
                 source={bookmarkSource}
                 translations={translations.bookmarks}
                 emptyIcon="iconBookmark"
                 sectionLabel={translations.bookmarks.groupLabel}
                 active={preferences.activeTab === "bookmarks"}
+                initialSort={preferences.sorts.bookmarks}
+                onSortChange={(sort) => persistSort("bookmarks", sort)}
             />
         </div>
         <div class:fn__none={preferences.activeTab !== "tags"} class="sidebar-hub__source-panel">
             <EntrySourcePanel
+                bind:this={tagPanel}
                 source={tagSource}
                 translations={translations.tags}
                 emptyIcon="iconTag"
                 sectionLabel={translations.tabs.tags}
                 showSectionLabels={false}
                 active={preferences.activeTab === "tags"}
+                initialSort={preferences.sorts.tags}
+                onSortChange={(sort) => persistSort("tags", sort)}
             />
         </div>
         <div class:fn__none={preferences.activeTab !== "databases"} class="sidebar-hub__source-panel">
             <EntrySourcePanel
+                bind:this={databasePanel}
                 source={databaseSource}
                 translations={translations.databases}
                 emptyIcon="iconDatabase"
                 sectionLabel={translations.tabs.databases}
                 showSectionLabels={false}
                 active={preferences.activeTab === "databases"}
+                initialSort={preferences.sorts.databases}
+                onSortChange={(sort) => persistSort("databases", sort)}
             />
         </div>
         <div class:fn__none={preferences.activeTab !== "pages"} class="sidebar-hub__source-panel">
             <EntrySourcePanel
+                bind:this={pagePanel}
                 source={pageSource}
                 translations={translations.pages}
                 emptyIcon="iconFile"
                 sectionLabel={translations.tabs.pages}
                 showSectionLabels={false}
                 active={preferences.activeTab === "pages"}
+                initialSort={preferences.sorts.pages}
+                onSortChange={(sort) => persistSort("pages", sort)}
             />
         </div>
     </div>

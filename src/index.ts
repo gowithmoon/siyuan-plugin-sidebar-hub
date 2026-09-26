@@ -1,10 +1,11 @@
-import { Plugin, Setting, showMessage } from "siyuan";
+import { Plugin, Setting, showMessage, type IWebSocketData } from "siyuan";
 import { mount, unmount } from "svelte";
 
 import SidebarHub from "./sidebar-hub/sidebar-hub.svelte";
 import type { BookmarkSortField } from "./sidebar-hub/bookmarks";
 import type { DatabaseSortField } from "./sidebar-hub/databases";
 import type { PageSortField } from "./sidebar-hub/pages";
+import type { EntrySourceSort } from "./sidebar-hub/entry-source";
 import {
     loadDailyNotebookConfig,
     loadDailyNotebooks,
@@ -16,8 +17,13 @@ import {
     normalizePreferences,
     setTabVisibility,
     type SidebarHubPreferences,
+    type SidebarHubSortField,
     type SidebarTabId,
 } from "./sidebar-hub/preferences";
+import {
+    sourceInvalidationForEvent,
+    type SourceInvalidation,
+} from "./sidebar-hub/source-invalidation";
 import "./index.scss";
 
 const DOCK_TYPE = "sidebar-hub";
@@ -25,6 +31,7 @@ const PREFERENCES_FILE = "preferences.json";
 
 interface SidebarHubHandle {
     updatePreferences: (preferences: SidebarHubPreferences) => void;
+    invalidateSources: (invalidation: SourceInvalidation) => Promise<void>;
 }
 
 interface SidebarHubTranslations {
@@ -111,6 +118,15 @@ export default class SidebarHubPlugin extends Plugin {
     private readonly dockHandles = new Set<SidebarHubHandle>();
     private readonly visibilityInputs = new Map<SidebarTabId, HTMLInputElement>();
     private dailyNotebookOptions: DailyNotebookOption[] = [];
+    private readonly handleWsMain = (event: CustomEvent<IWebSocketData>) => {
+        this.invalidateFromEvent("ws-main", event.detail);
+    };
+    private readonly handleOpenedNotebook = () => {
+        this.invalidateFromEvent("opened-notebook");
+    };
+    private readonly handleClosedNotebook = () => {
+        this.invalidateFromEvent("closed-notebook");
+    };
 
     async onload() {
         this.preferences = normalizePreferences(await this.loadData(PREFERENCES_FILE));
@@ -126,6 +142,9 @@ export default class SidebarHubPlugin extends Plugin {
         }
         this.setting = new Setting({});
         this.registerSettings(translations);
+        this.eventBus.on("ws-main", this.handleWsMain);
+        this.eventBus.on("opened-notebook", this.handleOpenedNotebook);
+        this.eventBus.on("closed-notebook", this.handleClosedNotebook);
 
         const plugin = this;
         this.addDock({
@@ -150,6 +169,9 @@ export default class SidebarHubPlugin extends Plugin {
                         translations,
                         instanceId: crypto.randomUUID(),
                         onActiveTabChange: (tabId: SidebarTabId) => plugin.selectTab(tabId),
+                        onSortChange: (tabId: SidebarTabId, sort: EntrySourceSort<SidebarHubSortField>) => {
+                            void plugin.changeSort(tabId, sort);
+                        },
                     },
                 }) as SidebarHubHandle;
 
@@ -166,6 +188,12 @@ export default class SidebarHubPlugin extends Plugin {
                 (this.data.host as HTMLElement | undefined)?.remove();
             },
         });
+    }
+
+    onunload() {
+        this.eventBus.off("ws-main", this.handleWsMain);
+        this.eventBus.off("opened-notebook", this.handleOpenedNotebook);
+        this.eventBus.off("closed-notebook", this.handleClosedNotebook);
     }
 
     private registerSettings(translations: SidebarHubTranslations) {
@@ -230,6 +258,29 @@ export default class SidebarHubPlugin extends Plugin {
             ...this.preferences,
             activeTab: tabId,
         });
+    }
+
+    private async changeSort(tabId: SidebarTabId, sort: EntrySourceSort<SidebarHubSortField>) {
+        await this.updatePreferences({
+            ...this.preferences,
+            sorts: {
+                ...this.preferences.sorts,
+                [tabId]: sort,
+            },
+        });
+    }
+
+    private invalidateFromEvent(
+        type: "ws-main" | "opened-notebook" | "closed-notebook",
+        detail?: Pick<IWebSocketData, "cmd" | "data">,
+    ) {
+        const invalidation = sourceInvalidationForEvent(type, detail);
+        if (!invalidation) {
+            return;
+        }
+        for (const handle of this.dockHandles) {
+            void handle.invalidateSources(invalidation);
+        }
     }
 
     private async updatePreferences(preferences: SidebarHubPreferences) {

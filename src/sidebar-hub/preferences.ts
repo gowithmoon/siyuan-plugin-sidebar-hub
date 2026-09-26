@@ -1,3 +1,9 @@
+import type { EntrySourceSort } from "./entry-source";
+import { BOOKMARK_SORT_FIELDS, type BookmarkSortField } from "./bookmarks";
+import { DATABASE_SORT_FIELDS, type DatabaseSortField } from "./databases";
+import { PAGE_SORT_FIELDS, type PageSortField } from "./pages";
+import { TAG_SORT_FIELDS, type TagSortField } from "./tags";
+
 export const TAB_DEFINITIONS = [
     { id: "bookmarks", icon: "iconBookmark" },
     { id: "tags", icon: "iconTag" },
@@ -7,17 +13,35 @@ export const TAB_DEFINITIONS = [
 
 export type SidebarTabId = (typeof TAB_DEFINITIONS)[number]["id"];
 
+export type SidebarHubSortField = BookmarkSortField | TagSortField | DatabaseSortField | PageSortField;
+export type SidebarHubSorts = Record<SidebarTabId, EntrySourceSort<SidebarHubSortField>>;
+
 export interface SidebarHubPreferences {
     activeTab: SidebarTabId;
     dailyNotebookId: string;
+    sorts: SidebarHubSorts;
     visibleTabs: Record<SidebarTabId, boolean>;
 }
 
-const TAB_IDS = TAB_DEFINITIONS.map((tab) => tab.id);
+export const SIDEBAR_TAB_IDS: readonly SidebarTabId[] = TAB_DEFINITIONS.map((tab) => tab.id);
+const SORT_FIELDS: Record<SidebarTabId, readonly SidebarHubSortField[]> = {
+    bookmarks: BOOKMARK_SORT_FIELDS,
+    tags: TAG_SORT_FIELDS,
+    databases: DATABASE_SORT_FIELDS,
+    pages: PAGE_SORT_FIELDS,
+};
+
+const DEFAULT_SORTS: SidebarHubSorts = {
+    bookmarks: { field: "name", direction: "asc" },
+    tags: { field: "name", direction: "asc" },
+    databases: { field: "name", direction: "asc" },
+    pages: { field: "name", direction: "asc" },
+};
 
 export const DEFAULT_PREFERENCES: SidebarHubPreferences = {
     activeTab: "bookmarks",
     dailyNotebookId: "",
+    sorts: DEFAULT_SORTS,
     visibleTabs: {
         bookmarks: true,
         tags: true,
@@ -30,21 +54,27 @@ export function normalizePreferences(value: unknown): SidebarHubPreferences {
     const stored = isRecord(value) ? value : {};
     const storedVisibility = isRecord(stored.visibleTabs) ? stored.visibleTabs : {};
     const visibleTabs = Object.fromEntries(
-        TAB_IDS.map((tabId) => [tabId, storedVisibility[tabId] !== false]),
+        SIDEBAR_TAB_IDS.map((tabId) => [tabId, storedVisibility[tabId] !== false]),
     ) as Record<SidebarTabId, boolean>;
 
-    if (!TAB_IDS.some((tabId) => visibleTabs[tabId])) {
+    if (!SIDEBAR_TAB_IDS.some((tabId) => visibleTabs[tabId])) {
         visibleTabs.bookmarks = true;
     }
 
     const requestedActiveTab = stored.activeTab;
     const activeTab = isSidebarTabId(requestedActiveTab) && visibleTabs[requestedActiveTab]
         ? requestedActiveTab
-        : TAB_IDS.find((tabId) => visibleTabs[tabId])!;
+        : SIDEBAR_TAB_IDS.find((tabId) => visibleTabs[tabId])!;
+    const storedSorts = isRecord(stored.sorts) ? stored.sorts : {};
+    const sorts = Object.fromEntries(SIDEBAR_TAB_IDS.map((tabId) => [
+        tabId,
+        normalizeSort(storedSorts[tabId], tabId),
+    ])) as SidebarHubSorts;
 
     return {
         activeTab,
         dailyNotebookId: typeof stored.dailyNotebookId === "string" ? stored.dailyNotebookId : "",
+        sorts,
         visibleTabs,
     };
 }
@@ -59,7 +89,7 @@ export function setTabVisibility(
         [tabId]: visible,
     };
 
-    if (!TAB_IDS.some((id) => visibleTabs[id])) {
+    if (!SIDEBAR_TAB_IDS.some((id) => visibleTabs[id])) {
         return preferences;
     }
 
@@ -70,7 +100,17 @@ export function setTabVisibility(
 }
 
 function isSidebarTabId(value: unknown): value is SidebarTabId {
-    return typeof value === "string" && TAB_IDS.includes(value as SidebarTabId);
+    return typeof value === "string" && SIDEBAR_TAB_IDS.includes(value as SidebarTabId);
+}
+
+function normalizeSort(value: unknown, tabId: SidebarTabId): EntrySourceSort<SidebarHubSortField> {
+    const stored = isRecord(value) ? value : {};
+    if (typeof stored.field !== "string" || !SORT_FIELDS[tabId].includes(stored.field as SidebarHubSortField)) {
+        return DEFAULT_SORTS[tabId];
+    }
+    const field = stored.field as SidebarHubSortField;
+    const direction = stored.direction === "desc" ? "desc" : "asc";
+    return { field, direction };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

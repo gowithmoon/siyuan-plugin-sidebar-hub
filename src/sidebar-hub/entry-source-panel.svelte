@@ -1,11 +1,11 @@
 <script lang="ts">
-    import { onDestroy } from "svelte";
+    import { onDestroy, untrack } from "svelte";
     import { Menu, showMessage } from "siyuan";
 
+    import { createEntrySourceRuntime, type EntrySourceRuntimeState } from "./entry-source-runtime";
     import type {
         EntrySource,
-        EntrySourceSnapshot,
-        SortDirection,
+        EntrySourceSort,
     } from "./entry-source";
 
     interface Translations {
@@ -31,58 +31,46 @@
         sectionLabel?: string;
         showSectionLabels?: boolean;
         active: boolean;
+        initialSort: EntrySourceSort<string>;
+        onSortChange: (sort: EntrySourceSort<string>) => void;
     }
 
-    let { source, translations, emptyIcon, sectionLabel, showSectionLabels = true, active }: Props = $props();
-    let query = $state("");
-    let sortField = $state("");
-    let sortDirection = $state<SortDirection>("asc");
-    let snapshot = $state<EntrySourceSnapshot>({ status: "idle", sections: [] });
-    let searchTimer: ReturnType<typeof setTimeout> | undefined;
-
-    initializeSourceState();
+    let {
+        source,
+        translations,
+        emptyIcon,
+        sectionLabel,
+        showSectionLabels = true,
+        active,
+        initialSort,
+        onSortChange,
+    }: Props = $props();
+    let runtimeState = $state<EntrySourceRuntimeState<string>>();
+    const initialRuntimeOptions = untrack(() => ({ source, initialSort, onSortChange }));
+    const runtime = createEntrySourceRuntime({
+        source: initialRuntimeOptions.source,
+        initialSort: initialRuntimeOptions.initialSort,
+        onChange: (state) => runtimeState = state,
+        onSortChange: initialRuntimeOptions.onSortChange,
+    });
+    runtimeState = runtime.state;
 
     $effect(() => {
-        if (active && snapshot.status === "idle") {
-            void update();
-        }
+        void runtime.setActive(active);
     });
 
-    onDestroy(() => clearTimeout(searchTimer));
+    onDestroy(() => runtime.dispose());
 
-    function initializeSourceState() {
-        sortField = source.sortFields[0] ?? "";
-        snapshot = source.snapshot;
-    }
-
-    async function update(options: { invalidate?: boolean } = {}) {
-        if (options.invalidate) {
-            source.invalidate();
-        }
-        snapshot = source.snapshot;
-        const result = source.query(
-            { query, sort: { field: sortField, direction: sortDirection } },
-            (nextSnapshot) => snapshot = nextSnapshot,
-        );
-        snapshot = source.snapshot;
-        snapshot = await result;
+    export function invalidate() {
+        return runtime.invalidate();
     }
 
     function changeQuery(event: Event) {
-        query = (event.currentTarget as HTMLInputElement).value;
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => {
-            if (snapshot.status !== "error") {
-                void update();
-            }
-        }, 180);
+        runtime.setQuery((event.currentTarget as HTMLInputElement).value);
     }
 
     function setSortField(field: string) {
-        sortField = field;
-        if (snapshot.status !== "error") {
-            void update();
-        }
+        void runtime.setSortField(field);
     }
 
     function openSortMenu(event: MouseEvent) {
@@ -98,7 +86,7 @@
         for (const field of source.sortFields) {
             menu.addItem({
                 label: translations.sortOptions[field] ?? field,
-                icon: field === sortField ? "iconSelect" : undefined,
+                icon: field === runtimeState.sort.field ? "iconSelect" : undefined,
                 click: () => setSortField(field),
             });
         }
@@ -108,10 +96,7 @@
     }
 
     function toggleSortDirection() {
-        sortDirection = sortDirection === "asc" ? "desc" : "asc";
-        if (snapshot.status !== "error") {
-            void update();
-        }
+        void runtime.toggleSortDirection();
     }
 
     async function openEntry(key: string) {
@@ -123,7 +108,7 @@
     }
 
     function progressLabel() {
-        return translations.progress?.replace("{current}", String(snapshot.progress?.current ?? 0));
+        return translations.progress?.replace("{current}", String(runtimeState.snapshot.progress?.current ?? 0));
     }
 </script>
 
@@ -133,53 +118,53 @@
         <input
             type="search"
             class="b3-text-field"
-            value={query}
+            value={runtimeState.query}
             placeholder={translations.searchPlaceholder}
             aria-label={translations.searchPlaceholder}
             oninput={changeQuery}
         />
     </label>
     <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south"
-        aria-label={`${translations.sortLabel}：${translations.sortOptions[sortField] ?? sortField}`}
+        aria-label={`${translations.sortLabel}：${translations.sortOptions[runtimeState.sort.field] ?? runtimeState.sort.field}`}
         onclick={openSortMenu}>
         <svg aria-hidden="true"><use href="#iconSort"></use></svg>
     </button>
     <button type="button" class="block__icon block__icon--show ariaLabel sidebar-hub__sort-direction" data-position="south"
-        aria-label={sortDirection === "asc" ? translations.sortAscending : translations.sortDescending}
-        aria-pressed={sortDirection === "desc"} onclick={toggleSortDirection}>
-        <svg aria-hidden="true"><use href={sortDirection === "asc" ? "#iconUp" : "#iconDown"}></use></svg>
+        aria-label={runtimeState.sort.direction === "asc" ? translations.sortAscending : translations.sortDescending}
+        aria-pressed={runtimeState.sort.direction === "desc"} onclick={toggleSortDirection}>
+        <svg aria-hidden="true"><use href={runtimeState.sort.direction === "asc" ? "#iconUp" : "#iconDown"}></use></svg>
     </button>
     <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south"
-        aria-label={translations.refresh} onclick={() => update({ invalidate: true })}>
-        <svg class:fn__rotate={snapshot.status === "loading"} aria-hidden="true"><use href="#iconRefresh"></use></svg>
+        aria-label={translations.refresh} onclick={() => runtime.refresh()}>
+        <svg class:fn__rotate={runtimeState.snapshot.status === "loading"} aria-hidden="true"><use href="#iconRefresh"></use></svg>
     </button>
 </div>
 
-{#if snapshot.status === "loading" && snapshot.sections.length === 0}
+{#if runtimeState.snapshot.status === "loading" && runtimeState.snapshot.sections.length === 0}
     <div class="sidebar-hub__state" role="status">
         <svg class="fn__rotate" aria-hidden="true"><use href="#iconRefresh"></use></svg>
         <p>{translations.loading}</p>
     </div>
-{:else if snapshot.status === "error"}
+{:else if runtimeState.snapshot.status === "error"}
     <div class="sidebar-hub__state" role="alert">
         <svg aria-hidden="true"><use href="#iconInfo"></use></svg>
         <p>{translations.loadError}</p>
-        {#if snapshot.error && snapshot.error !== translations.loadError}
-            <small>{snapshot.error}</small>
+        {#if runtimeState.snapshot.error && runtimeState.snapshot.error !== translations.loadError}
+            <small>{runtimeState.snapshot.error}</small>
         {/if}
-        <button type="button" class="b3-button b3-button--outline" onclick={() => update()}>{translations.retry}</button>
+        <button type="button" class="b3-button b3-button--outline" onclick={() => runtime.refresh()}>{translations.retry}</button>
     </div>
-{:else if snapshot.status === "ready" && snapshot.sections.length === 0}
+{:else if runtimeState.snapshot.status === "ready" && runtimeState.snapshot.sections.length === 0}
     <div class="sidebar-hub__state">
         <svg aria-hidden="true"><use href={`#${emptyIcon}`}></use></svg>
-        <p>{query.trim() ? translations.noMatches : translations.empty}</p>
+        <p>{runtimeState.query.trim() ? translations.noMatches : translations.empty}</p>
     </div>
 {:else}
-    {#if snapshot.status === "loading" && snapshot.progress && translations.progress}
+    {#if runtimeState.snapshot.status === "loading" && runtimeState.snapshot.progress && translations.progress}
         <div class="sidebar-hub__progress" role="status">{progressLabel()}</div>
     {/if}
-    <div class="sidebar-hub__entry-list" aria-busy={snapshot.status === "loading"}>
-        {#each snapshot.sections as section (section.key)}
+    <div class="sidebar-hub__entry-list" aria-busy={runtimeState.snapshot.status === "loading"}>
+        {#each runtimeState.snapshot.sections as section (section.key)}
             <section class="sidebar-hub__entry-section" aria-label={sectionLabel ?? translations.searchPlaceholder}>
                 {#if showSectionLabels && section.label}<h3>{section.label}</h3>{/if}
                 {#each section.entries as entry (entry.key)}
