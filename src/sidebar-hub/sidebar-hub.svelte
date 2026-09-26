@@ -436,11 +436,11 @@
                 {#if openPicker === "year"}
                     <div class="sidebar-hub__period-picker sidebar-hub__year-picker" role="dialog" aria-label={translations.year} tabindex="-1">
                         <div class="sidebar-hub__year-picker-header">
-                            <button type="button" class="block__icon" aria-label={translations.previousYears} onclick={() => moveYearPage(-1)}>
+                            <button type="button" class="block__icon block__icon--show" aria-label={translations.previousYears} onclick={() => moveYearPage(-1)}>
                                 <svg aria-hidden="true"><use href="#iconLeft"></use></svg>
                             </button>
                             <span>{pickerYears[0]}–{pickerYears[pickerYears.length - 1]}</span>
-                            <button type="button" class="block__icon" aria-label={translations.nextYears} onclick={() => moveYearPage(1)}>
+                            <button type="button" class="block__icon block__icon--show" aria-label={translations.nextYears} onclick={() => moveYearPage(1)}>
                                 <svg aria-hidden="true"><use href="#iconRight"></use></svg>
                             </button>
                         </div>
