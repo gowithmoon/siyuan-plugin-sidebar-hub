@@ -26,7 +26,7 @@ export interface BookmarkGroup {
 }
 
 interface BookmarkDependencies {
-    load: () => Promise<BookmarkGroup[]>;
+    load: () => Promise<unknown>;
     open: (blockId: string) => Promise<void> | void;
 }
 
@@ -48,9 +48,10 @@ export function createBookmarkSource(dependencies: BookmarkDependencies): EntryS
 }
 
 function buildBookmarkSections(
-    groups: BookmarkGroup[],
+    rawGroups: unknown,
     input: EntrySourceQuery<BookmarkSortField>,
 ): EntrySourceSection[] {
+    const groups = normalizeBookmarkGroups(rawGroups);
     const keywords = input.query.toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
     const direction = input.sort.direction === "asc" ? 1 : -1;
 
@@ -71,6 +72,59 @@ function buildBookmarkSections(
         })
         .filter((group) => group.entries.length > 0)
         .sort((left, right) => compareText(left.label ?? "", right.label ?? ""));
+}
+
+export function normalizeBookmarkGroups(value: unknown): BookmarkGroup[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    const groups = new Map<string, BookmarkGroup>();
+    for (const rawGroup of value) {
+        if (!isRecord(rawGroup) || typeof rawGroup.name !== "string") {
+            console.warn("Skipping malformed bookmark group", rawGroup);
+            continue;
+        }
+        const name = rawGroup.name.trim();
+        if (!name) {
+            continue;
+        }
+
+        const blocks: BookmarkBlock[] = [];
+        if (!Array.isArray(rawGroup.blocks)) {
+            console.warn("Skipping malformed bookmark group blocks", rawGroup);
+        } else {
+            for (const rawBlock of rawGroup.blocks) {
+                if (!isRecord(rawBlock) || typeof rawBlock.id !== "string" || !rawBlock.id) {
+                    console.warn("Skipping malformed bookmark block", rawBlock);
+                    continue;
+                }
+                blocks.push({
+                    id: rawBlock.id,
+                    rootID: typeof rawBlock.rootID === "string" ? rawBlock.rootID : rawBlock.id,
+                    content: typeof rawBlock.content === "string" ? rawBlock.content : "",
+                    name: typeof rawBlock.name === "string" ? rawBlock.name : undefined,
+                    hPath: typeof rawBlock.hPath === "string" ? rawBlock.hPath : undefined,
+                    created: typeof rawBlock.created === "string" ? rawBlock.created : "",
+                    updated: typeof rawBlock.updated === "string" ? rawBlock.updated : "",
+                    type: typeof rawBlock.type === "string" ? rawBlock.type : "",
+                });
+            }
+        }
+
+        const existing = groups.get(name);
+        if (existing) {
+            existing.blocks.push(...blocks);
+        } else {
+            groups.set(name, { name, blocks });
+        }
+    }
+
+    return [...groups.values()].filter((group) => group.blocks.length > 0);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function toBookmarkRecord(block: BookmarkBlock): BookmarkRecord {

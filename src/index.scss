@@ -193,6 +193,10 @@
     border-bottom: 1px solid var(--b3-border-color);
 }
 
+.sidebar-hub__tools--collapsible {
+    grid-template-columns: minmax(0, 1fr) repeat(4, 30px);
+}
+
 .sidebar-hub__search {
     position: relative;
     width: 100%;
@@ -262,6 +266,32 @@
     font-weight: 500;
     line-height: 1.4;
     text-align: left;
+}
+
+.sidebar-hub__section-toggle {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 4px 3px;
+    border: 0;
+    color: var(--b3-theme-on-surface-light);
+    background: transparent;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+    text-align: left;
+    cursor: pointer;
+}
+
+.sidebar-hub__section-toggle:hover {
+    color: var(--b3-theme-on-background);
+}
+
+.sidebar-hub__section-toggle svg {
+    width: 14px;
+    height: 14px;
 }
 
 .sidebar-hub__list-item {

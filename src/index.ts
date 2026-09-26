@@ -70,6 +70,8 @@ interface SidebarHubTranslations {
         openError: string;
         groupLabel: string;
         sortOptions: Record<BookmarkSortField, string>;
+        expandAll: string;
+        collapseAll: string;
     };
     tags: {
         searchPlaceholder: string;
@@ -175,6 +177,9 @@ export default class SidebarHubPlugin extends Plugin {
                         onSortChange: (tabId: SidebarTabId, sort: EntrySourceSort<SidebarHubSortField>) => {
                             void plugin.changeSort(tabId, sort);
                         },
+                        onBookmarkCollapsedChange: (keys: string[]) => {
+                            void plugin.changeBookmarkCollapsedGroups(keys);
+                        },
                     },
                 }) as SidebarHubHandle;
 
@@ -270,6 +275,13 @@ export default class SidebarHubPlugin extends Plugin {
                 ...this.preferences.sorts,
                 [tabId]: sort,
             },
+        });
+    }
+
+    private async changeBookmarkCollapsedGroups(keys: string[]) {
+        await this.updatePreferences({
+            ...this.preferences,
+            collapsedBookmarkGroups: keys,
         });
     }
 

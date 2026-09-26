@@ -39,6 +39,8 @@
             "loadError": "Bookmarks could not be loaded. Try again.",
             "openError": "This bookmark could not be opened.",
             "groupLabel": "Bookmark group",
+            "expandAll": "Expand all bookmark groups",
+            "collapseAll": "Collapse all bookmark groups",
             "sortOptions": {
                 "name": "Name",
                 "created": "Created",

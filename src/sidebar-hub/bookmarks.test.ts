@@ -116,4 +116,25 @@ describe("书签导航", () => {
         expect(source.snapshot).toMatchObject({ status: "ready", sections: [{ entries: [{ label: "API 索引" }] }] });
         expect(load).toHaveBeenCalledTimes(1);
     });
+
+    it("合并重复书签值、忽略空白值并跳过异常记录", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+        const source = createBookmarkSource({
+            load: vi.fn().mockResolvedValue([
+                { name: "参考", blocks: [groups[0].blocks[0]] },
+                { name: "参考", blocks: [groups[0].blocks[1]] },
+                { name: "  ", blocks: [groups[1].blocks[0]] },
+                null,
+                { name: "异常", blocks: [null, { id: "", content: "坏数据" }] },
+            ]),
+            open: vi.fn(),
+        });
+
+        await expect(source.query(input)).resolves.toMatchObject({
+            status: "ready",
+            sections: [{ key: "参考", entries: [{ label: "API 索引" }, { label: "插件开发记录" }] }],
+        });
+        expect(warn).toHaveBeenCalled();
+        warn.mockRestore();
+    });
 });

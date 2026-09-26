@@ -39,6 +39,8 @@
             "loadError": "书签加载失败，请重试。",
             "openError": "无法打开这个书签。",
             "groupLabel": "书签分组",
+            "expandAll": "展开全部书签分组",
+            "collapseAll": "折叠全部书签分组",
             "sortOptions": {
                 "name": "名称",
                 "created": "创建时间",

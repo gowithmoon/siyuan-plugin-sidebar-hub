@@ -44,6 +44,8 @@
         openError: string;
         progress?: string;
         sortOptions: Record<string, string>;
+        expandAll?: string;
+        collapseAll?: string;
     }
 
     interface Translations {
@@ -76,6 +78,7 @@
         instanceId: string;
         onActiveTabChange: (tabId: SidebarTabId) => void;
         onSortChange: (tabId: SidebarTabId, sort: EntrySourceSort<SidebarHubSortField>) => void;
+        onBookmarkCollapsedChange: (keys: string[]) => void;
     }
 
     interface EntrySourcePanelHandle {
@@ -89,6 +92,7 @@
         instanceId,
         onActiveTabChange,
         onSortChange,
+        onBookmarkCollapsedChange,
     }: Props = $props();
     const today = new Date();
     const bookmarkSource = createBookmarkSource({
@@ -401,6 +405,9 @@
                 translations={translations.bookmarks}
                 emptyIcon="iconBookmark"
                 sectionLabel={translations.bookmarks.groupLabel}
+                collapsible={true}
+                collapsedKeys={preferences.collapsedBookmarkGroups}
+                onCollapsedKeysChange={onBookmarkCollapsedChange}
                 active={preferences.activeTab === "bookmarks"}
                 initialSort={preferences.sorts.bookmarks}
                 onSortChange={(sort) => persistSort("bookmarks", sort)}

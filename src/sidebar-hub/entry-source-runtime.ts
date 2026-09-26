@@ -7,6 +7,7 @@ import type {
 
 export interface EntrySourceRuntimeState<TField extends string> {
     query: string;
+    loadedQuery?: string;
     sort: EntrySourceSort<TField>;
     snapshot: EntrySourceSnapshot;
 }
@@ -38,6 +39,7 @@ export function createEntrySourceRuntime<TField extends string>(
     let searchTimer: ReturnType<typeof setTimeout> | undefined;
     let state: EntrySourceRuntimeState<TField> = {
         query: "",
+        loadedQuery: undefined,
         sort: normalizeSort(options.initialSort),
         snapshot: options.source.snapshot,
     };
@@ -50,16 +52,24 @@ export function createEntrySourceRuntime<TField extends string>(
     async function load() {
         clearTimeout(searchTimer);
         searchTimer = undefined;
+        const query = state.query;
+        const sort = state.sort;
         const result = options.source.query(
-            { query: state.query, sort: state.sort },
+            { query, sort },
             (snapshot) => publish({ snapshot }),
         );
-        publish({ snapshot: options.source.snapshot });
-        publish({ snapshot: await result });
+        publish({ snapshot: options.source.snapshot, loadedQuery: undefined });
+        const snapshot = await result;
+        publish({
+            snapshot,
+            loadedQuery: state.query === query && state.sort.field === sort.field && state.sort.direction === sort.direction
+                ? query
+                : state.loadedQuery,
+        });
     }
 
     async function changeSort(sort: EntrySourceSort<TField>) {
-        publish({ sort });
+        publish({ sort, loadedQuery: undefined });
         options.onSortChange?.(sort);
         if (state.snapshot.status !== "error") {
             await load();
@@ -88,7 +98,7 @@ export function createEntrySourceRuntime<TField extends string>(
             }
         },
         setQuery(query) {
-            publish({ query });
+            publish({ query, loadedQuery: undefined });
             clearTimeout(searchTimer);
             searchTimer = setTimeout(() => {
                 if (state.snapshot.status !== "error") {
@@ -107,7 +117,7 @@ export function createEntrySourceRuntime<TField extends string>(
         },
         async refresh() {
             options.source.invalidate();
-            publish({ snapshot: options.source.snapshot });
+            publish({ snapshot: options.source.snapshot, loadedQuery: undefined });
             await load();
         },
         async invalidate() {
@@ -115,7 +125,7 @@ export function createEntrySourceRuntime<TField extends string>(
                 return;
             }
             options.source.invalidate();
-            publish({ snapshot: options.source.snapshot });
+            publish({ snapshot: options.source.snapshot, loadedQuery: undefined });
             if (active) {
                 await load();
             }

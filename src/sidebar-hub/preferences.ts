@@ -21,6 +21,7 @@ export interface SidebarHubPreferences {
     dailyNotebookId: string;
     sorts: SidebarHubSorts;
     visibleTabs: Record<SidebarTabId, boolean>;
+    collapsedBookmarkGroups: string[];
 }
 
 export const SIDEBAR_TAB_IDS: readonly SidebarTabId[] = TAB_DEFINITIONS.map((tab) => tab.id);
@@ -48,6 +49,7 @@ export const DEFAULT_PREFERENCES: SidebarHubPreferences = {
         databases: true,
         pages: true,
     },
+    collapsedBookmarkGroups: [],
 };
 
 export function normalizePreferences(value: unknown): SidebarHubPreferences {
@@ -70,12 +72,16 @@ export function normalizePreferences(value: unknown): SidebarHubPreferences {
         tabId,
         normalizeSort(storedSorts[tabId], tabId),
     ])) as SidebarHubSorts;
+    const collapsedBookmarkGroups = isRecord(stored) && Array.isArray(stored.collapsedBookmarkGroups)
+        ? [...new Set(stored.collapsedBookmarkGroups.filter((value): value is string => typeof value === "string" && value.length > 0))]
+        : [];
 
     return {
         activeTab,
         dailyNotebookId: typeof stored.dailyNotebookId === "string" ? stored.dailyNotebookId : "",
         sorts,
         visibleTabs,
+        collapsedBookmarkGroups,
     };
 }
 

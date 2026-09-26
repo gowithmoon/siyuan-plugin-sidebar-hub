@@ -27,4 +27,11 @@ describe("侧边抽屉偏好", () => {
             pages: { field: "created", direction: "asc" },
         });
     });
+
+    it("兼容旧偏好并规范化书签分组折叠身份", () => {
+        expect(normalizePreferences({}).collapsedBookmarkGroups).toEqual([]);
+        expect(normalizePreferences({
+            collapsedBookmarkGroups: ["参考", "参考", "", 42, " 常用 "],
+        }).collapsedBookmarkGroups).toEqual(["参考", " 常用 "]);
+    });
 });
