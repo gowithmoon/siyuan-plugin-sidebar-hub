@@ -41,6 +41,10 @@ interface SidebarHubTranslations {
     today: string;
     year: string;
     month: string;
+    yearUnit: string;
+    monthUnit: string;
+    previousYears: string;
+    nextYears: string;
     previousDay: string;
     nextDay: string;
     noPreviousDailyNote: string;

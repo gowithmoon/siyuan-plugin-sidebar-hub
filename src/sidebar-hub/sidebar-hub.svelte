@@ -61,6 +61,10 @@
         today: string;
         year: string;
         month: string;
+        yearUnit: string;
+        monthUnit: string;
+        previousYears: string;
+        nextYears: string;
         previousDay: string;
         nextDay: string;
         noPreviousDailyNote: string;
@@ -107,7 +111,6 @@
         onTagCollapsedChange,
     }: Props = $props();
     const today = new Date();
-    const years = Array.from({ length: 201 }, (_, index) => 1900 + index);
     const months = Array.from({ length: 12 }, (_, index) => index);
     const bookmarkSource = createBookmarkSource({
         load: loadBookmarkGroups,
@@ -132,6 +135,8 @@
     let preferences = $state<SidebarHubPreferences>();
     let visibleYear = $state(today.getFullYear());
     let visibleMonth = $state(today.getMonth());
+    let openPicker = $state<"year" | "month" | null>(null);
+    let yearPageEnd = $state(today.getFullYear());
     let selectedDate = $state("");
     let focusedDate = $state(toDateKey(today));
     let dailyNoteDates = $state<Record<string, string>>({});
@@ -142,6 +147,7 @@
     let pagePanel: EntrySourcePanelHandle;
     let monthRequest = 0;
     let calendar = $derived(buildCalendarMonth(visibleYear, visibleMonth, today));
+    let pickerYears = $derived(Array.from({ length: 16 }, (_, index) => yearPageEnd - 15 + index));
     let visibleTabs = $derived(TAB_DEFINITIONS.filter((tab) => preferences.visibleTabs[tab.id]));
     const dailyNoteNavigator = createDailyNoteNavigator({
         selectedNotebookId: () => preferences.dailyNotebookId,
@@ -192,10 +198,57 @@
         onSortChange(tabId, sort as EntrySourceSort<SidebarHubSortField>);
     }
 
-    function changeVisibleDate(year: number, month: number) {
+    function selectVisibleDate(year: number, month: number, picker: "year" | "month") {
         visibleYear = year;
         visibleMonth = month;
         focusedDate = toDateKey(new Date(year, month, 1));
+        openPicker = null;
+        requestAnimationFrame(() => {
+            document.querySelector<HTMLButtonElement>(
+                `[data-sidebar-hub-instance="${instanceId}"] [data-period-trigger="${picker}"]`,
+            )?.focus();
+        });
+    }
+
+    function togglePicker(picker: "year" | "month") {
+        if (openPicker === picker) {
+            openPicker = null;
+            return;
+        }
+        if (picker === "year") {
+            yearPageEnd = visibleYear;
+        }
+        openPicker = picker;
+        requestAnimationFrame(() => {
+            document.querySelector<HTMLButtonElement>(
+                `[data-sidebar-hub-instance="${instanceId}"] [data-${picker}-option="${picker === "year" ? visibleYear : visibleMonth}"]`,
+            )?.focus();
+        });
+    }
+
+    function closePickerOnWindowClick(event: MouseEvent) {
+        if (event.target instanceof Element
+            && event.target.closest(`[data-sidebar-hub-instance="${instanceId}"] .sidebar-hub__calendar-period`)) {
+            return;
+        }
+        openPicker = null;
+    }
+
+    function handleWindowKeydown(event: KeyboardEvent) {
+        if (event.key === "Escape" && openPicker) {
+            const picker = openPicker;
+            openPicker = null;
+            event.preventDefault();
+            requestAnimationFrame(() => {
+                document.querySelector<HTMLButtonElement>(
+                    `[data-sidebar-hub-instance="${instanceId}"] [data-period-trigger="${picker}"]`,
+                )?.focus();
+            });
+        }
+    }
+
+    function moveYearPage(offset: number) {
+        yearPageEnd += offset * 16;
     }
 
     function returnToToday() {
@@ -349,30 +402,78 @@
     }
 </script>
 
+<svelte:window onclick={closePickerOnWindowClick} onkeydown={handleWindowKeydown} />
+
 <div class="sidebar-hub fn__flex-column" data-sidebar-hub-instance={instanceId}>
     <section class="sidebar-hub__calendar" aria-label={translations.calendar}>
         <div class="sidebar-hub__calendar-header">
-            <div class="sidebar-hub__calendar-selectors">
-                <select
-                    class="b3-select sidebar-hub__calendar-select sidebar-hub__calendar-select--year"
-                    aria-label={translations.year}
-                    value={visibleYear}
-                    onchange={(event) => changeVisibleDate(Number(event.currentTarget.value), visibleMonth)}
+            <div class="sidebar-hub__calendar-period">
+                <button
+                    type="button"
+                    class="sidebar-hub__period-trigger"
+                    data-period-trigger="year"
+                    aria-label={`${translations.year}: ${visibleYear}`}
+                    aria-haspopup="dialog"
+                    aria-expanded={openPicker === "year"}
+                    onclick={() => togglePicker("year")}
                 >
-                    {#each years as year}
-                        <option value={year}>{year}</option>
-                    {/each}
-                </select>
-                <select
-                    class="b3-select sidebar-hub__calendar-select sidebar-hub__calendar-select--month"
-                    aria-label={translations.month}
-                    value={visibleMonth}
-                    onchange={(event) => changeVisibleDate(visibleYear, Number(event.currentTarget.value))}
+                    {visibleYear}
+                </button>
+                <span>{translations.yearUnit}</span>
+                <button
+                    type="button"
+                    class="sidebar-hub__period-trigger"
+                    data-period-trigger="month"
+                    aria-label={`${translations.month}: ${visibleMonth + 1}`}
+                    aria-haspopup="dialog"
+                    aria-expanded={openPicker === "month"}
+                    onclick={() => togglePicker("month")}
                 >
-                    {#each months as month}
-                        <option value={month}>{String(month + 1).padStart(2, "0")}</option>
-                    {/each}
-                </select>
+                    {visibleMonth + 1}
+                </button>
+                <span>{translations.monthUnit}</span>
+
+                {#if openPicker === "year"}
+                    <div class="sidebar-hub__period-picker sidebar-hub__year-picker" role="dialog" aria-label={translations.year} tabindex="-1">
+                        <div class="sidebar-hub__year-picker-header">
+                            <button type="button" class="block__icon" aria-label={translations.previousYears} onclick={() => moveYearPage(-1)}>
+                                <svg aria-hidden="true"><use href="#iconLeft"></use></svg>
+                            </button>
+                            <span>{pickerYears[0]}–{pickerYears[pickerYears.length - 1]}</span>
+                            <button type="button" class="block__icon" aria-label={translations.nextYears} onclick={() => moveYearPage(1)}>
+                                <svg aria-hidden="true"><use href="#iconRight"></use></svg>
+                            </button>
+                        </div>
+                        <div class="sidebar-hub__period-grid sidebar-hub__period-grid--years">
+                            {#each pickerYears as year}
+                                <button
+                                    type="button"
+                                    class:sidebar-hub__period-option--selected={year === visibleYear}
+                                    class:sidebar-hub__period-option--today={year === today.getFullYear()}
+                                    class="sidebar-hub__period-option"
+                                    data-year-option={year}
+                                    aria-pressed={year === visibleYear}
+                                    onclick={() => selectVisibleDate(year, visibleMonth, "year")}
+                                >{year}</button>
+                            {/each}
+                        </div>
+                    </div>
+                {:else if openPicker === "month"}
+                    <div class="sidebar-hub__period-picker" role="dialog" aria-label={translations.month} tabindex="-1">
+                        <div class="sidebar-hub__period-grid sidebar-hub__period-grid--months">
+                            {#each months as month}
+                                <button
+                                    type="button"
+                                    class:sidebar-hub__period-option--selected={month === visibleMonth}
+                                    class="sidebar-hub__period-option"
+                                    data-month-option={month}
+                                    aria-pressed={month === visibleMonth}
+                                    onclick={() => selectVisibleDate(visibleYear, month, "month")}
+                                >{month + 1}{translations.monthUnit}</button>
+                            {/each}
+                        </div>
+                    </div>
+                {/if}
             </div>
             <div class="sidebar-hub__calendar-navigation">
                 <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south" aria-label={translations.previousDay} onclick={() => openAdjacentDailyNote("previous")}>

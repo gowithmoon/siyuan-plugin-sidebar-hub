@@ -29,30 +29,107 @@
     margin-bottom: 6px;
 }
 
-.sidebar-hub__calendar-selectors {
+.sidebar-hub__calendar-period {
+    position: relative;
     display: flex;
     flex: 0 0 auto;
-    min-width: 0;
-    gap: 2px;
-}
-
-.sidebar-hub__calendar-select {
-    height: 28px;
-    padding: 0 4px;
-    border: 0;
-    color: inherit;
-    background: transparent;
-    font: inherit;
+    align-items: center;
+    gap: 3px;
     font-size: 14px;
     font-weight: 600;
 }
 
-.sidebar-hub__calendar-select--year {
-    width: 72px;
+.sidebar-hub__period-trigger {
+    min-width: 0;
+    height: 28px;
+    padding: 0 2px;
+    border: 0;
+    border-radius: var(--b3-border-radius);
+    color: inherit;
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
 }
 
-.sidebar-hub__calendar-select--month {
-    width: 52px;
+.sidebar-hub__period-trigger:hover,
+.sidebar-hub__period-trigger[aria-expanded="true"] {
+    color: var(--b3-theme-primary);
+    background: var(--b3-list-hover);
+}
+
+.sidebar-hub__period-picker {
+    position: absolute;
+    top: 32px;
+    left: 0;
+    z-index: 5;
+    box-sizing: border-box;
+    width: 224px;
+    padding: 8px;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    border-radius: var(--b3-border-radius-b);
+    background: var(--b3-theme-surface);
+    box-shadow: var(--b3-dialog-shadow);
+}
+
+.sidebar-hub__year-picker-header {
+    display: grid;
+    grid-template-columns: 28px 1fr 28px;
+    align-items: center;
+    margin-bottom: 6px;
+    color: var(--b3-theme-on-surface-light);
+    font-size: 12px;
+    font-weight: 500;
+    text-align: center;
+}
+
+.sidebar-hub__year-picker-header .block__icon {
+    width: 28px;
+    height: 28px;
+    padding: 6px;
+    border: 0;
+    background: transparent;
+}
+
+.sidebar-hub__year-picker-header .block__icon:hover {
+    color: var(--b3-theme-on-background);
+    background: var(--b3-list-hover);
+}
+
+.sidebar-hub__period-grid {
+    display: grid;
+    gap: 3px;
+}
+
+.sidebar-hub__period-grid--years,
+.sidebar-hub__period-grid--months {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.sidebar-hub__period-option {
+    height: 32px;
+    padding: 0 3px;
+    border: 0;
+    border-radius: var(--b3-border-radius);
+    color: var(--b3-theme-on-background);
+    background: transparent;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.sidebar-hub__period-option:hover {
+    background: var(--b3-list-hover);
+}
+
+.sidebar-hub__period-option--today {
+    color: var(--b3-theme-primary);
+    box-shadow: inset 0 0 0 1px var(--b3-theme-primary);
+}
+
+.sidebar-hub__period-option--selected {
+    color: var(--b3-theme-on-primary);
+    background: var(--b3-theme-primary);
+    box-shadow: none;
 }
 
 .sidebar-hub__calendar-navigation {
@@ -80,10 +157,6 @@
 .sidebar-hub__day:hover {
     color: var(--b3-theme-on-background);
     background: var(--b3-list-hover);
-}
-
-.sidebar-hub__calendar-select:focus-visible {
-    outline-offset: -2px;
 }
 
 .sidebar-hub__weekdays,
