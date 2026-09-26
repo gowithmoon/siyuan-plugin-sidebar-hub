@@ -5,6 +5,7 @@
     import { createEntrySourceRuntime, type EntrySourceRuntimeState } from "./entry-source-runtime";
     import type {
         EntrySource,
+        EntrySourceEntry,
         EntrySourceSort,
     } from "./entry-source";
 
@@ -24,6 +25,8 @@
         sortOptions: Record<string, string>;
         expandAll?: string;
         collapseAll?: string;
+        expandNode?: string;
+        collapseNode?: string;
     }
 
     interface Props {
@@ -36,6 +39,7 @@
         initialSort: EntrySourceSort<string>;
         onSortChange: (sort: EntrySourceSort<string>) => void;
         collapsible?: boolean;
+        nested?: boolean;
         collapsedKeys?: string[];
         onCollapsedKeysChange?: (keys: string[]) => void;
     }
@@ -50,6 +54,7 @@
         initialSort,
         onSortChange,
         collapsible = false,
+        nested = false,
         collapsedKeys: initialCollapsedKeys = [],
         onCollapsedKeysChange,
     }: Props = $props();
@@ -73,6 +78,9 @@
         if (signature !== lastExternalCollapsedKeys) {
             lastExternalCollapsedKeys = signature;
             localCollapsedKeys = new Set(initialCollapsedKeys);
+            if (runtimeState.query.trim()) {
+                searchCollapsedBackup = new Set(initialCollapsedKeys);
+            }
         }
     });
 
@@ -100,7 +108,7 @@
         if (!collapsible || runtimeState.loadedQuery !== "" || runtimeState.snapshot.status !== "ready") {
             return;
         }
-        const sectionKeys = runtimeState.snapshot.sections.map((section) => section.key);
+        const sectionKeys = nested ? nestedEntryKeys() : runtimeState.snapshot.sections.map((section) => section.key);
         const signature = sectionKeys.join("\u0000");
         if (signature === lastCleanedSectionSignature) {
             return;
@@ -155,11 +163,15 @@
     }
 
     function isSectionCollapsed(key: string) {
-        return collapsible && !runtimeState.query.trim() && localCollapsedKeys.has(key);
+        return collapsible && !nested && !runtimeState.query.trim() && localCollapsedKeys.has(key);
+    }
+
+    function isEntryCollapsed(key: string) {
+        return collapsible && nested && !runtimeState.query.trim() && localCollapsedKeys.has(key);
     }
 
     function toggleSection(key: string) {
-        if (!collapsible || runtimeState.query.trim()) {
+        if (!collapsible || nested || runtimeState.query.trim()) {
             return;
         }
         const next = new Set(localCollapsedKeys);
@@ -173,6 +185,10 @@
     }
 
     function allSectionsCollapsed() {
+        if (nested) {
+            const keys = nestedCollapsibleKeys();
+            return keys.length > 0 && keys.every((key) => localCollapsedKeys.has(key));
+        }
         const sections = runtimeState.snapshot.sections;
         return sections.length > 0 && sections.every((section) => localCollapsedKeys.has(section.key));
     }
@@ -181,11 +197,61 @@
         if (!collapsible || runtimeState.query.trim()) {
             return;
         }
+        const keys = nested ? nestedCollapsibleKeys() : runtimeState.snapshot.sections.map((section) => section.key);
         const next = allSectionsCollapsed()
             ? new Set<string>()
-            : new Set(runtimeState.snapshot.sections.map((section) => section.key));
+            : new Set(keys);
         localCollapsedKeys = next;
         onCollapsedKeysChange?.([...next]);
+    }
+
+    function nestedCollapsibleKeys() {
+        const keys: string[] = [];
+        const visit = (entries: EntrySourceEntry[]) => {
+            for (const entry of entries) {
+                if (entry.children?.length) {
+                    keys.push(entry.key);
+                    visit(entry.children);
+                }
+            }
+        };
+        for (const section of runtimeState.snapshot.sections) {
+            visit(section.entries);
+        }
+        return keys;
+    }
+
+    function nestedEntryKeys() {
+        const keys: string[] = [];
+        const visit = (entries: EntrySourceEntry[]) => {
+            for (const entry of entries) {
+                keys.push(entry.key);
+                visit(entry.children ?? []);
+            }
+        };
+        for (const section of runtimeState.snapshot.sections) {
+            visit(section.entries);
+        }
+        return keys;
+    }
+
+    function toggleEntry(key: string) {
+        if (!collapsible || !nested || runtimeState.query.trim()) {
+            return;
+        }
+        const next = new Set(localCollapsedKeys);
+        if (next.has(key)) {
+            next.delete(key);
+        } else {
+            next.add(key);
+        }
+        localCollapsedKeys = next;
+        onCollapsedKeysChange?.([...next]);
+    }
+
+    function openEntryFromEvent(event: MouseEvent, key: string) {
+        event.stopPropagation();
+        void openEntry(key);
     }
 
     async function openEntry(key: string) {
@@ -274,12 +340,43 @@
                     {/if}
                 {/if}
                 {#if !isSectionCollapsed(section.key)}
-                    {#each section.entries as entry (entry.key)}
-                        <button type="button" class="sidebar-hub__list-item" title={entry.label} onclick={() => openEntry(entry.key)}>
-                            <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
-                            <span>{entry.label}</span>
-                        </button>
-                    {/each}
+                    {#if nested}
+                        {#snippet renderEntries(entries: EntrySourceEntry[], depth = 0)}
+                            {#each entries as entry (entry.key)}
+                                <div class="sidebar-hub__tree-item" style={`padding-left: ${depth * 18 + 4}px`}>
+                                    {#if entry.children?.length}
+                                        <button type="button" class="sidebar-hub__tree-toggle" aria-label={isEntryCollapsed(entry.key) ? translations.expandNode : translations.collapseNode} aria-expanded={!isEntryCollapsed(entry.key)} onclick={() => toggleEntry(entry.key)}>
+                                            <svg aria-hidden="true"><use href={isEntryCollapsed(entry.key) ? "#iconRight" : "#iconDown"}></use></svg>
+                                        </button>
+                                    {:else}
+                                        <span class="sidebar-hub__tree-toggle-spacer" aria-hidden="true"></span>
+                                    {/if}
+                                    {#if entry.openable === false}
+                                        <span class="sidebar-hub__tree-label" title={entry.label}>
+                                            <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
+                                            <span>{entry.label}</span>
+                                        </span>
+                                    {:else}
+                                        <button type="button" class="sidebar-hub__list-item sidebar-hub__tree-label" title={entry.label} onclick={(event) => openEntryFromEvent(event, entry.key)}>
+                                            <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
+                                            <span>{entry.label}</span>
+                                        </button>
+                                    {/if}
+                                </div>
+                                {#if entry.children?.length && !isEntryCollapsed(entry.key)}
+                                    {@render renderEntries(entry.children, depth + 1)}
+                                {/if}
+                            {/each}
+                        {/snippet}
+                        {@render renderEntries(section.entries)}
+                    {:else}
+                        {#each section.entries as entry (entry.key)}
+                            <button type="button" class="sidebar-hub__list-item" title={entry.label} onclick={() => openEntry(entry.key)}>
+                                <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
+                                <span>{entry.label}</span>
+                            </button>
+                        {/each}
+                    {/if}
                 {/if}
             </section>
         {/each}

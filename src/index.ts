@@ -85,6 +85,10 @@ interface SidebarHubTranslations {
         noMatches: string;
         loadError: string;
         openError: string;
+        expandAll: string;
+        collapseAll: string;
+        expandNode: string;
+        collapseNode: string;
         sortOptions: Record<"name" | "count", string>;
     };
     databases: {
@@ -179,6 +183,9 @@ export default class SidebarHubPlugin extends Plugin {
                         },
                         onBookmarkCollapsedChange: (keys: string[]) => {
                             void plugin.changeBookmarkCollapsedGroups(keys);
+                        },
+                        onTagCollapsedChange: (keys: string[]) => {
+                            void plugin.changeTagCollapsedPaths(keys);
                         },
                     },
                 }) as SidebarHubHandle;
@@ -282,6 +289,13 @@ export default class SidebarHubPlugin extends Plugin {
         await this.updatePreferences({
             ...this.preferences,
             collapsedBookmarkGroups: keys,
+        });
+    }
+
+    private async changeTagCollapsedPaths(keys: string[]) {
+        await this.updatePreferences({
+            ...this.preferences,
+            collapsedTagPaths: keys,
         });
     }
 

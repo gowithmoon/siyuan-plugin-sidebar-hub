@@ -34,4 +34,11 @@ describe("侧边抽屉偏好", () => {
             collapsedBookmarkGroups: ["参考", "参考", "", 42, " 常用 "],
         }).collapsedBookmarkGroups).toEqual(["参考", " 常用 "]);
     });
+
+    it("兼容旧偏好并规范化标签路径折叠身份", () => {
+        expect(normalizePreferences({}).collapsedTagPaths).toEqual([]);
+        expect(normalizePreferences({
+            collapsedTagPaths: ["标签", "标签", "", 42, "标签/子标签"],
+        }).collapsedTagPaths).toEqual(["标签", "标签/子标签"]);
+    });
 });

@@ -59,6 +59,10 @@
             "noMatches": "No matching tags.",
             "loadError": "Tags could not be loaded. Try again.",
             "openError": "This tag could not be opened.",
+            "expandAll": "Expand all tags",
+            "collapseAll": "Collapse all tags",
+            "expandNode": "Expand child tags",
+            "collapseNode": "Collapse child tags",
             "sortOptions": {
                 "name": "Name",
                 "count": "Reference count"

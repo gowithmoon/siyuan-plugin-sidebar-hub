@@ -46,6 +46,8 @@
         sortOptions: Record<string, string>;
         expandAll?: string;
         collapseAll?: string;
+        expandNode?: string;
+        collapseNode?: string;
     }
 
     interface Translations {
@@ -79,6 +81,7 @@
         onActiveTabChange: (tabId: SidebarTabId) => void;
         onSortChange: (tabId: SidebarTabId, sort: EntrySourceSort<SidebarHubSortField>) => void;
         onBookmarkCollapsedChange: (keys: string[]) => void;
+        onTagCollapsedChange: (keys: string[]) => void;
     }
 
     interface EntrySourcePanelHandle {
@@ -93,6 +96,7 @@
         onActiveTabChange,
         onSortChange,
         onBookmarkCollapsedChange,
+        onTagCollapsedChange,
     }: Props = $props();
     const today = new Date();
     const bookmarkSource = createBookmarkSource({
@@ -427,6 +431,10 @@
                 emptyIcon="iconTag"
                 sectionLabel={translations.tabs.tags}
                 showSectionLabels={false}
+                collapsible={true}
+                nested={true}
+                collapsedKeys={preferences.collapsedTagPaths}
+                onCollapsedKeysChange={onTagCollapsedChange}
                 active={preferences.activeTab === "tags"}
                 initialSort={preferences.sorts.tags}
                 onSortChange={(sort) => persistSort("tags", sort)}

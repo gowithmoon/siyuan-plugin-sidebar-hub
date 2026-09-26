@@ -22,6 +22,7 @@ export interface SidebarHubPreferences {
     sorts: SidebarHubSorts;
     visibleTabs: Record<SidebarTabId, boolean>;
     collapsedBookmarkGroups: string[];
+    collapsedTagPaths: string[];
 }
 
 export const SIDEBAR_TAB_IDS: readonly SidebarTabId[] = TAB_DEFINITIONS.map((tab) => tab.id);
@@ -50,6 +51,7 @@ export const DEFAULT_PREFERENCES: SidebarHubPreferences = {
         pages: true,
     },
     collapsedBookmarkGroups: [],
+    collapsedTagPaths: [],
 };
 
 export function normalizePreferences(value: unknown): SidebarHubPreferences {
@@ -75,6 +77,9 @@ export function normalizePreferences(value: unknown): SidebarHubPreferences {
     const collapsedBookmarkGroups = isRecord(stored) && Array.isArray(stored.collapsedBookmarkGroups)
         ? [...new Set(stored.collapsedBookmarkGroups.filter((value): value is string => typeof value === "string" && value.length > 0))]
         : [];
+    const collapsedTagPaths = isRecord(stored) && Array.isArray(stored.collapsedTagPaths)
+        ? [...new Set(stored.collapsedTagPaths.filter((value): value is string => typeof value === "string" && value.length > 0))]
+        : [];
 
     return {
         activeTab,
@@ -82,6 +87,7 @@ export function normalizePreferences(value: unknown): SidebarHubPreferences {
         sorts,
         visibleTabs,
         collapsedBookmarkGroups,
+        collapsedTagPaths,
     };
 }
 

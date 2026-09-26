@@ -31,7 +31,7 @@ describe("标签导航", () => {
         expect(tagSearchKeyword("项目/开发")).toBe("#项目/开发#");
     });
 
-    it("把层级标签平铺成完整路径，并声明名称和引用数排序", async () => {
+    it("保留标签树层级，并让虚拟父标签只作为结构节点", async () => {
         const source = createTagSource({ load: vi.fn().mockResolvedValue(tags), open: vi.fn() });
 
         expect(source.sortFields).toEqual(TAG_SORT_FIELDS);
@@ -42,26 +42,50 @@ describe("标签导航", () => {
                 key: "tags",
                 entries: [
                     { key: "阅读", label: "阅读", icon: "iconTag" },
-                    { key: "项目", label: "项目", icon: "iconTag" },
-                    { key: "项目/开发", label: "项目/开发", icon: "iconTag" },
+                    {
+                        key: "项目",
+                        label: "项目",
+                        icon: "iconTag",
+                        openable: false,
+                        children: [{ key: "项目/开发", label: "开发", icon: "iconTag" }],
+                    },
                 ],
             },
             ],
         });
     });
 
-    it("搜索名称并支持引用数量升降序，清空后恢复完整列表", async () => {
+    it("搜索叶子保留祖先，命中父节点显示完整子树，并支持同级引用数排序", async () => {
         const source = createTagSource({ load: vi.fn().mockResolvedValue(tags), open: vi.fn() });
 
         expect((await source.query({ ...input, query: "开发" })).sections).toMatchObject([
-            { entries: [{ key: "项目/开发", label: "项目/开发" }] },
+            { entries: [{ key: "项目", children: [{ key: "项目/开发", label: "开发" }] }] },
+        ]);
+        expect((await source.query({ ...input, query: "项目" })).sections).toMatchObject([
+            { entries: [{ key: "项目", children: [{ key: "项目/开发" }] }] },
         ]);
         expect((await source.query({ query: "", sort: { field: "count", direction: "desc" } })).sections[0].entries.map((entry) => entry.label))
-            .toEqual(["项目/开发", "阅读", "项目"]);
+            .toEqual(["阅读", "项目"]);
         expect((await source.query({ query: "", sort: { field: "count", direction: "asc" } })).sections[0].entries.map((entry) => entry.label))
-            .toEqual(["项目", "阅读", "项目/开发"]);
+            .toEqual(["项目", "阅读"]);
         expect((await source.query({ ...input, query: "不存在" })).sections).toEqual([]);
         expect((await source.query(input)).sections).toHaveLength(1);
+    });
+
+    it("相同局部名称使用完整路径作为身份，并让虚拟父标签不可打开", async () => {
+        const source = createTagSource({
+            load: vi.fn().mockResolvedValue([
+                { name: "A", label: "A", count: 1, children: [{ name: "共同", label: "A/共同", count: 2, children: [] }] },
+                { name: "B", label: "B", count: 1, children: [{ name: "共同", label: "B/共同", count: 3, children: [] }] },
+            ]),
+            open: vi.fn(),
+        });
+
+        const entries = (await source.query(input)).sections[0].entries;
+        expect(entries.map((entry) => entry.key)).toEqual(["A", "B"]);
+        expect(entries[0].children?.[0].key).toBe("A/共同");
+        expect(entries[1].children?.[0].key).toBe("B/共同");
+        expect(entries[0].openable).toBe(true);
     });
 
     it("打开标签时把原生搜索关键词交给适配器", async () => {

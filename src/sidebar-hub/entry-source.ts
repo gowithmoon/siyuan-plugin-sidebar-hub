@@ -14,6 +14,9 @@ export interface EntrySourceEntry {
     key: string;
     label: string;
     icon: string;
+    count?: number;
+    children?: EntrySourceEntry[];
+    openable?: boolean;
 }
 
 export interface EntrySourceSection {
