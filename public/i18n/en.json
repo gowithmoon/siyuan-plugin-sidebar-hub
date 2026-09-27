@@ -89,7 +89,9 @@
             "loadError": "Databases could not be loaded. Try again.",
             "openError": "This database could not be opened.",
             "sortOptions": {
-                "name": "Name"
+                "name": "Name",
+                "created": "Created",
+                "updated": "Modified"
             }
         },
         "pages": {

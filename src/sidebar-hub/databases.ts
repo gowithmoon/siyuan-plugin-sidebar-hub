@@ -5,9 +5,9 @@ import {
     type EntrySourceSection,
 } from "./entry-source";
 
-export type DatabaseSortField = "name";
+export type DatabaseSortField = "name" | "created" | "updated";
 
-export const DATABASE_SORT_FIELDS: readonly DatabaseSortField[] = ["name"];
+export const DATABASE_SORT_FIELDS: readonly DatabaseSortField[] = ["name", "created", "updated"];
 
 export interface DatabaseSearchResult {
     avID: string;
@@ -39,6 +39,8 @@ interface DatabaseRecord {
     label: string;
     icon: string;
     avID: string;
+    created?: string;
+    updatedRank: number;
 }
 
 export function createDatabaseSource(dependencies: DatabaseDependencies): EntrySource<DatabaseSortField> {
@@ -80,7 +82,7 @@ function buildDatabaseSections(
     const direction = input.sort.direction === "asc" ? 1 : -1;
     const entries = aggregateDatabases(results)
         .filter((database) => matchesKeywords(database.label, keywords))
-        .sort((left, right) => compareText(left.label, right.label) * direction)
+        .sort((left, right) => compareDatabases(left, right, input.sort.field) * direction)
         .map(({ key, label, icon }) => ({ key, label, icon, count: counts.get(key), countable: true }));
 
     return entries.length > 0 ? [{ key: "databases", entries }] : [];
@@ -88,7 +90,7 @@ function buildDatabaseSections(
 
 function aggregateDatabases(results: DatabaseSearchResult[]): DatabaseRecord[] {
     const records = new Map<string, DatabaseRecord>();
-    for (const result of flattenResults(results)) {
+    for (const [updatedRank, result] of flattenResults(results).entries()) {
         if (!result.avID || records.has(result.avID)) {
             continue;
         }
@@ -98,9 +100,28 @@ function aggregateDatabases(results: DatabaseSearchResult[]): DatabaseRecord[] {
             label: result.avName || result.avID,
             icon: "iconDatabase",
             avID: result.avID,
+            created: databaseCreatedKey(result.avID),
+            updatedRank,
         });
     }
     return [...records.values()];
+}
+
+function compareDatabases(left: DatabaseRecord, right: DatabaseRecord, field: DatabaseSortField) {
+    if (field === "created") {
+        if (left.created !== undefined && right.created !== undefined) {
+            return compareText(left.created, right.created);
+        }
+        return compareText(left.label, right.label);
+    }
+    if (field === "updated") {
+        return right.updatedRank - left.updatedRank || compareText(left.label, right.label);
+    }
+    return compareText(left.label, right.label);
+}
+
+function databaseCreatedKey(avID: string) {
+    return /^(\d{14})/.exec(avID)?.[1];
 }
 
 async function loadDatabaseCounts(
