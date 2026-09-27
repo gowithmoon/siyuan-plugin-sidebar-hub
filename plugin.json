@@ -2,7 +2,7 @@
   "name": "siyuan-plugin-sidebar-hub",
   "author": "gowithmoon",
   "url": "https://github.com/gowithmoon/siyuan-plugin-sidebar-hub",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "3.8.0",
   "kernels": [],
   "disabledInPublish": true,
