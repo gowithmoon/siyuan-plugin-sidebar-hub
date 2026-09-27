@@ -686,6 +686,7 @@
                 emptyIcon="iconFile"
                 sectionLabel={translations.tabs.pages}
                 showSectionLabels={false}
+                virtualized={true}
                 active={preferences.activeTab === "pages"}
                 initialSort={preferences.sorts.pages}
                 onSortChange={(sort) => persistSort("pages", sort)}

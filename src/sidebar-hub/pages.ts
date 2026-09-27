@@ -9,6 +9,9 @@ export type PageSortField = "name" | "created" | "updated";
 
 export const PAGE_SORT_FIELDS: readonly PageSortField[] = ["name", "created", "updated"];
 
+const PAGE_SCAN_PROGRESS_INTERVAL_MS = 100;
+const PAGE_COUNT_BATCH_SIZE = 64;
+
 export interface PageNotebook {
     id: string;
     name: string;
@@ -69,10 +72,11 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
     let queryVersion = 0;
     let snapshot: EntrySourceSnapshot = { status: "idle", sections: [] };
     let countCache = new Map<string, number>();
-    let countGeneration = -1;
+    let countTargets = new Set<string>();
+    let countAttempted = new Set<string>();
+    let countRequestActive = false;
     let currentInput: EntrySourceQuery<PageSortField> | undefined;
     let currentUpdate: ((snapshot: EntrySourceSnapshot) => void) | undefined;
-    let countEnabled = false;
     let hasSuccessfulSnapshot = false;
 
     return {
@@ -87,7 +91,7 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             if (cached) {
                 snapshot = { status: "ready", sections: buildPageSections(cached, input, countCache) };
                 onUpdate?.(snapshot);
-                startCounts(cached, generation);
+                startTargetCounts();
                 return snapshot;
             }
 
@@ -98,6 +102,7 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             const nextKnownDocuments = new Map<string, KnownDocument>();
             const nextDailyPaths = new Set<string>();
             let scanned = 0;
+            let lastProgressAt = Date.now();
             snapshot = { status: "loading", sections: previousSections, progress: { current: 0 } };
             onUpdate?.(snapshot);
 
@@ -105,9 +110,14 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
                 if (requestVersion !== queryVersion || requestedGeneration !== generation) {
                     return;
                 }
+                const now = Date.now();
+                if (now - lastProgressAt < PAGE_SCAN_PROGRESS_INTERVAL_MS) {
+                    return;
+                }
+                lastProgressAt = now;
                 snapshot = {
                     status: "loading",
-                    sections: retainPreviousSections ? previousSections : buildPageSections(records, input, countCache),
+                    sections: previousSections,
                     progress: { current: scanned },
                 };
                 onUpdate?.(snapshot);
@@ -133,7 +143,7 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
                 };
                 hasSuccessfulSnapshot = true;
                 onUpdate?.(snapshot);
-                startCounts(records, requestedGeneration);
+                startTargetCounts();
             } catch (error) {
                 if (requestVersion === queryVersion && requestedGeneration === generation) {
                     snapshot = {
@@ -266,22 +276,12 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             dailyPaths = new Set();
             removedDocumentIds = new Set();
             countCache = new Map();
-            countGeneration = -1;
+            countAttempted = new Set();
             snapshot = { status: "idle", sections: hasSuccessfulSnapshot ? snapshot.sections : [] };
         },
         setCountTargets(keys) {
-            const enabled = keys.length > 0;
-            countEnabled = enabled;
-            if (countEnabled && cached && currentInput && snapshot.status === "ready") {
-                snapshot = {
-                    ...snapshot,
-                    sections: buildPageSections(cached, currentInput, countCache),
-                };
-                currentUpdate?.(snapshot);
-            }
-            if (countEnabled && cached) {
-                startCounts(cached, generation);
-            }
+            countTargets = new Set(keys);
+            startTargetCounts();
         },
     };
 
@@ -304,27 +304,45 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             path === dailyPath || isDescendantPath(path, dailyPath) || isDescendantPath(dailyPath, path));
     }
 
-    function startCounts(records: PageRecord[], requestedGeneration: number) {
-        if (!countEnabled || !dependencies.getDocRefCounts || countGeneration === requestedGeneration) {
+    function startTargetCounts() {
+        if (!dependencies.getDocRefCounts || !cached || countRequestActive) {
             return;
         }
-        countGeneration = requestedGeneration;
-        void loadCounts(records, requestedGeneration);
+
+        const availableIds = new Set(cached.map((record) => record.id));
+        const batch: string[] = [];
+        for (const key of countTargets) {
+            if (availableIds.has(key) && !countCache.has(key) && !countAttempted.has(key)) {
+                countAttempted.add(key);
+                batch.push(key);
+                if (batch.length === PAGE_COUNT_BATCH_SIZE) {
+                    break;
+                }
+            }
+        }
+        if (batch.length === 0) {
+            return;
+        }
+
+        countRequestActive = true;
+        void loadCountBatch(batch, generation);
     }
 
-    async function loadCounts(records: PageRecord[], requestedGeneration: number) {
+    async function loadCountBatch(ids: string[], requestedGeneration: number) {
         if (!dependencies.getDocRefCounts) {
             return;
         }
         try {
-            const counts = await dependencies.getDocRefCounts(records.map((record) => record.id));
+            const counts = await dependencies.getDocRefCounts(ids);
             if (requestedGeneration !== generation) {
                 return;
             }
-            for (const [id, count] of Object.entries(counts)) {
-                countCache.set(id, count);
+            for (const id of ids) {
+                if (Object.prototype.hasOwnProperty.call(counts, id)) {
+                    countCache.set(id, counts[id]);
+                }
             }
-            if (countEnabled && cached && currentInput && snapshot.status === "ready") {
+            if (cached && currentInput && snapshot.status === "ready") {
                 snapshot = {
                     ...snapshot,
                     sections: buildPageSections(cached, currentInput, countCache),
@@ -332,7 +350,10 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
                 currentUpdate?.(snapshot);
             }
         } catch {
-            // 失败的页面计数保持未知状态，不影响页面列表。
+            // 失败的页面计数在当前 generation 保持未知状态且不自动重试。
+        } finally {
+            countRequestActive = false;
+            startTargetCounts();
         }
     }
 }

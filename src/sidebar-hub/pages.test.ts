@@ -24,7 +24,7 @@ const trees: Record<string, PageDocument[]> = {
 const sort = { field: "name", direction: "asc" } as const;
 
 describe("普通页面来源", () => {
-    it("列表就绪后批量加载文档引用数量，并保留零值", async () => {
+    it("只为显式目标页面加载引用数量，并保留零值", async () => {
         const getDocRefCounts = vi.fn().mockResolvedValue({ reading: 0, "journal-other": 3 });
         const source = createPageSource({
             listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(2)),
@@ -34,13 +34,13 @@ describe("普通页面来源", () => {
             open: vi.fn(),
         });
         const updates: number[][] = [];
-        source.setCountTargets(["reading", "journal-other"]);
+        source.setCountTargets(["reading"]);
         await source.query({ query: "", sort }, (next) => {
             updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.count ?? -1)));
         });
 
-        await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledWith(["reading", "journal-other"]));
-        expect(updates[updates.length - 1]).toEqual([3, 0]);
+        await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledWith(["reading"]));
+        expect(updates[updates.length - 1]).toEqual([-1, 0]);
     });
 
     it("切换离开再回来时不会丢失已经完成的批量计数", async () => {
@@ -67,7 +67,122 @@ describe("普通页面来源", () => {
         expect(updates[updates.length - 1]).toEqual([0, 4]);
     });
 
-    it("递归扫描已打开笔记本，渐进呈现结果和进度，并排除日记及其祖先", async () => {
+    it("每批最多加载 64 个页面引用数量，并顺序处理多个批次", async () => {
+        const pageIds = Array.from({ length: 130 }, (_, index) => `page-${index}`);
+        const resolvers: Array<(counts: Record<string, number>) => void> = [];
+        const getDocRefCounts = vi.fn((_ids: string[]) => new Promise<Record<string, number>>((resolve) => {
+            resolvers.push(resolve);
+        }));
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue([{ id: "work", name: "工作", closed: false }]),
+            listDocuments: vi.fn(async (_: string, path: string) => path === "/"
+                ? pageIds.map((id) => doc(id, `/${id}.sy`, id))
+                : []),
+            getBlockAttrs: vi.fn(async () => ({})),
+            getDocRefCounts,
+            open: vi.fn(),
+        });
+
+        await source.query({ query: "", sort });
+        source.setCountTargets(pageIds);
+
+        await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledOnce());
+        expect(getDocRefCounts.mock.calls[0][0]).toEqual(pageIds.slice(0, 64));
+        resolvers[0](Object.fromEntries(pageIds.slice(0, 64).map((id) => [id, 1])));
+        await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledTimes(2));
+        expect(getDocRefCounts.mock.calls[1][0]).toEqual(pageIds.slice(64, 128));
+        resolvers[1](Object.fromEntries(pageIds.slice(64, 128).map((id) => [id, 1])));
+        await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledTimes(3));
+        expect(getDocRefCounts.mock.calls[2][0]).toEqual(pageIds.slice(128));
+        resolvers[2](Object.fromEntries(pageIds.slice(128).map((id) => [id, 1])));
+    });
+
+    it("目标替换后不再加载已离屏的排队页面", async () => {
+        const pageIds = Array.from({ length: 70 }, (_, index) => `page-${index}`);
+        let resolveFirst!: (counts: Record<string, number>) => void;
+        const getDocRefCounts = vi.fn((ids: string[]) => ids[0] === "page-0"
+            ? new Promise<Record<string, number>>((resolve) => {
+                resolveFirst = resolve;
+            })
+            : Promise.resolve({ [ids[0]]: 2 }));
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue([{ id: "work", name: "工作", closed: false }]),
+            listDocuments: vi.fn(async (_: string, path: string) => path === "/"
+                ? pageIds.map((id) => doc(id, `/${id}.sy`, id))
+                : []),
+            getBlockAttrs: vi.fn(async () => ({})),
+            getDocRefCounts,
+            open: vi.fn(),
+        });
+
+        await source.query({ query: "", sort });
+        source.setCountTargets(pageIds);
+        await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledOnce());
+        source.setCountTargets(["page-69"]);
+        resolveFirst({});
+
+        await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledTimes(2));
+        expect(getDocRefCounts.mock.calls[1][0]).toEqual(["page-69"]);
+    });
+
+    it("失败计数同一 generation 不重试，失效后才重试", async () => {
+        const getDocRefCounts = vi.fn()
+            .mockRejectedValueOnce(new Error("暂时失败"))
+            .mockResolvedValueOnce({ reading: 6 });
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(2)),
+            listDocuments: vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []),
+            getBlockAttrs: vi.fn(async () => ({})),
+            getDocRefCounts,
+            open: vi.fn(),
+        });
+
+        await source.query({ query: "", sort });
+        source.setCountTargets(["reading"]);
+        await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledOnce());
+        source.setCountTargets([]);
+        source.setCountTargets(["reading"]);
+        await Promise.resolve();
+        expect(getDocRefCounts).toHaveBeenCalledOnce();
+
+        source.invalidate();
+        await source.query({ query: "", sort });
+        await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledTimes(2));
+    });
+
+    it("旧 generation 的在途计数不能写回刷新后的快照", async () => {
+        const resolvers: Array<(counts: Record<string, number>) => void> = [];
+        const getDocRefCounts = vi.fn(() => new Promise<Record<string, number>>((resolve) => {
+            resolvers.push(resolve);
+        }));
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(2)),
+            listDocuments: vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []),
+            getBlockAttrs: vi.fn(async () => ({})),
+            getDocRefCounts,
+            open: vi.fn(),
+        });
+        const updates: number[][] = [];
+        await source.query({ query: "", sort }, (next) => {
+            updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.count ?? -1)));
+        });
+        source.setCountTargets(["reading"]);
+        await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledOnce());
+
+        source.invalidate();
+        await source.query({ query: "", sort }, (next) => {
+            updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.count ?? -1)));
+        });
+        expect(getDocRefCounts).toHaveBeenCalledOnce();
+        resolvers[0]({ reading: 1 });
+        await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledTimes(2));
+        expect(updates[updates.length - 1]).toEqual([-1, -1]);
+
+        resolvers[1]({ reading: 9 });
+        await vi.waitFor(() => expect(updates[updates.length - 1]).toEqual([-1, 9]));
+    });
+
+    it("递归扫描已打开笔记本，完成后一次呈现结果，并排除日记及其祖先", async () => {
         const listDocuments = vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []);
         const source = createPageSource({
             listNotebooks: vi.fn().mockResolvedValue(notebooks),
@@ -78,10 +193,13 @@ describe("普通页面来源", () => {
             ]))),
             open: vi.fn(),
         });
-        const updates: string[][] = [];
+        const updates: Array<{ status: string; labels: string[] }> = [];
 
         const snapshot = await source.query({ query: "", sort }, (progress) => {
-            updates.push(progress.sections.flatMap((section) => section.entries.map((entry) => entry.label)));
+            updates.push({
+                status: progress.status,
+                labels: progress.sections.flatMap((section) => section.entries.map((entry) => entry.label)),
+            });
         });
 
         expect(snapshot).toMatchObject({
@@ -93,8 +211,47 @@ describe("普通页面来源", () => {
                 { key: "guide", label: "项目说明" },
             ] }],
         });
-        expect(updates.some((labels) => labels.length > 0 && labels.length < 3)).toBe(true);
+        expect(updates.filter((update) => update.status === "loading").every((update) => update.labels.length === 0))
+            .toBe(true);
+        expect(updates.filter((update) => update.labels.length > 0)).toHaveLength(1);
         expect(listDocuments).not.toHaveBeenCalledWith("archive", expect.anything());
+    });
+
+    it("扫描进度最多每 100ms 发布一次", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+        const documents: Record<string, PageDocument[]> = {
+            "/": [
+                doc("first", "/first.sy", "第一篇", 1),
+                doc("second", "/second.sy", "第二篇", 1),
+                doc("third", "/third.sy", "第三篇", 1),
+            ],
+            "/first.sy": [doc("first-child", "/first.sy/child.sy", "第一篇子文档")],
+            "/second.sy": [doc("second-child", "/second.sy/child.sy", "第二篇子文档")],
+            "/third.sy": [doc("third-child", "/third.sy/child.sy", "第三篇子文档")],
+        };
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue([{ id: "work", name: "工作", closed: false }]),
+            listDocuments: vi.fn(async (_: string, path: string) => {
+                vi.advanceTimersByTime(40);
+                return documents[path] ?? [];
+            }),
+            getBlockAttrs: vi.fn(async () => ({})),
+            open: vi.fn(),
+        });
+        const loadingUpdates: Array<{ time: number; current: number }> = [];
+
+        await source.query({ query: "", sort }, (next) => {
+            if (next.status === "loading") {
+                loadingUpdates.push({ time: Date.now(), current: next.progress?.current ?? -1 });
+            }
+        });
+
+        expect(loadingUpdates.length).toBeGreaterThan(1);
+        expect(loadingUpdates[0]).toEqual({ time: 0, current: 0 });
+        expect(loadingUpdates.slice(1).every((update, index) =>
+            update.time - loadingUpdates[index].time >= 100)).toBe(true);
+        vi.useRealTimers();
     });
 
     it("支持搜索及按名称、创建时间、修改时间升降序", async () => {
@@ -191,7 +348,7 @@ describe("普通页面来源", () => {
             updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.label)));
         });
 
-        expect(updates).toContainEqual(["第一篇"]);
+        expect(updates.every((labels) => labels.length === 0)).toBe(true);
         expect(snapshot).toMatchObject({ status: "error", sections: [] });
     });
 
