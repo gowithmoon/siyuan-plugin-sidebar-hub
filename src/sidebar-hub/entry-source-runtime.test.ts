@@ -66,6 +66,76 @@ describe("条目来源运行期状态", () => {
         expect(fixture.loadCount()).toBe(3);
     });
 
+    it("后台刷新完成前保留最近一次成功的列表", async () => {
+        type FixtureEntry = { key: string; label: string; icon: string };
+        let loadCount = 0;
+        let resolveReload!: (entries: FixtureEntry[]) => void;
+        const source = createEntrySource({
+            sortFields: ["name"] as const,
+            load: (): Promise<FixtureEntry[]> => {
+                loadCount += 1;
+                if (loadCount === 1) {
+                    return Promise.resolve([{ key: "doc", label: "旧标题", icon: "iconFile" }]);
+                }
+                return new Promise<FixtureEntry[]>((resolve) => {
+                    resolveReload = resolve;
+                });
+            },
+            build: (entries) => [{ key: "pages", entries }],
+            open: () => undefined,
+        });
+        const runtime = createEntrySourceRuntime({
+            source,
+            initialSort: { field: "name", direction: "asc" },
+        });
+
+        await runtime.setActive(true);
+        const reload = runtime.invalidate();
+        await Promise.resolve();
+
+        expect(runtime.state.snapshot).toMatchObject({
+            status: "loading",
+            sections: [{ entries: [{ label: "旧标题" }] }],
+        });
+
+        resolveReload([{ key: "doc", label: "新标题", icon: "iconFile" }]);
+        await reload;
+
+        expect(runtime.state.snapshot).toMatchObject({
+            status: "ready",
+            sections: [{ entries: [{ label: "新标题" }] }],
+        });
+    });
+
+    it("已有列表刷新失败时保留旧数据", async () => {
+        let loadCount = 0;
+        const source = createEntrySource({
+            sortFields: ["name"] as const,
+            load: async () => {
+                loadCount += 1;
+                if (loadCount === 1) {
+                    return [{ key: "doc", label: "旧标题", icon: "iconFile" }];
+                }
+                throw new Error("刷新失败");
+            },
+            build: (entries) => [{ key: "pages", entries }],
+            open: () => undefined,
+        });
+        const runtime = createEntrySourceRuntime({
+            source,
+            initialSort: { field: "name", direction: "asc" },
+        });
+
+        await runtime.setActive(true);
+        await runtime.invalidate();
+
+        expect(runtime.state.snapshot).toMatchObject({
+            status: "error",
+            sections: [{ entries: [{ label: "旧标题" }] }],
+            error: "刷新失败",
+        });
+    });
+
     it("不同标签页分别保留查询、排序和错误状态", async () => {
         const first = createFixture();
         const second = createFixture();

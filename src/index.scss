@@ -361,6 +361,22 @@
     font-size: 11px;
 }
 
+.sidebar-hub__refresh-error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 11px;
+    color: var(--b3-theme-on-surface-light);
+    font-size: 11px;
+}
+
+.sidebar-hub__refresh-error .b3-button {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    font-size: 11px;
+}
+
 .sidebar-hub__entry-section h3 {
     display: flex;
     min-width: 0;

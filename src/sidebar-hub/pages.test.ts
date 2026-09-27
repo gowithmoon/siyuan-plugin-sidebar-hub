@@ -130,6 +130,112 @@ describe("普通页面来源", () => {
         expect(open).toHaveBeenCalledWith("reading");
         expect(listDocuments).toHaveBeenCalledTimes(2);
     });
+
+    it("后台重扫完成前保留旧页面列表，不发布部分结果", async () => {
+        let generation = 0;
+        let resolveReload!: (documents: PageDocument[]) => void;
+        const listDocuments = vi.fn((_: string, path: string) => {
+            if (generation === 1 && path === "/") {
+                return new Promise<PageDocument[]>((resolve) => {
+                    resolveReload = resolve;
+                });
+            }
+            return Promise.resolve([
+                generation === 0
+                    ? doc("old", "/old.sy", "旧页面")
+                    : doc("new", "/new.sy", "新页面"),
+            ]);
+        });
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue([{ id: "work", name: "工作", closed: false }]),
+            listDocuments,
+            getBlockAttrs: vi.fn(async () => ({})),
+            open: vi.fn(),
+        });
+        const updates: string[][] = [];
+        await source.query({ query: "", sort }, (next) => {
+            updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.label)));
+        });
+
+        generation = 1;
+        source.invalidate();
+        const reload = source.query({ query: "", sort }, (next) => {
+            updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.label)));
+        });
+        await Promise.resolve();
+
+        expect(updates[updates.length - 1]).toEqual(["旧页面"]);
+
+        resolveReload([doc("new", "/new.sy", "新页面")]);
+        await reload;
+
+        expect(updates[updates.length - 1]).toEqual(["新页面"]);
+    });
+
+    it("首次扫描失败时不把部分结果当作旧列表", async () => {
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue([{ id: "work", name: "工作", closed: false }]),
+            listDocuments: vi.fn(async (_: string, path: string) => {
+                if (path === "/") {
+                    return [doc("first", "/first.sy", "第一篇"), doc("broken", "/broken.sy", "第二篇", 1)];
+                }
+                throw new Error("扫描失败");
+            }),
+            getBlockAttrs: vi.fn(async () => ({})),
+            open: vi.fn(),
+        });
+        const updates: string[][] = [];
+
+        const snapshot = await source.query({ query: "", sort }, (next) => {
+            updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.label)));
+        });
+
+        expect(updates).toContainEqual(["第一篇"]);
+        expect(snapshot).toMatchObject({ status: "error", sections: [] });
+    });
+
+    it("空列表刷新时也不发布后台扫描中的部分结果", async () => {
+        let generation = 0;
+        let resolveChild!: (documents: PageDocument[]) => void;
+        const listDocuments = vi.fn((_: string, path: string) => {
+            if (generation === 0) {
+                return Promise.resolve([]);
+            }
+            if (path === "/") {
+                return Promise.resolve([
+                    doc("partial", "/partial.sy", "临时页面"),
+                    doc("later", "/later.sy", "后续页面", 1),
+                ]);
+            }
+            return new Promise<PageDocument[]>((resolve) => {
+                resolveChild = resolve;
+            });
+        });
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue([{ id: "work", name: "工作", closed: false }]),
+            listDocuments,
+            getBlockAttrs: vi.fn(async () => ({})),
+            open: vi.fn(),
+        });
+        const updates: string[][] = [];
+        await source.query({ query: "", sort }, (next) => {
+            updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.label)));
+        });
+
+        generation = 1;
+        source.invalidate();
+        const reload = source.query({ query: "", sort }, (next) => {
+            updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.label)));
+        });
+        await vi.waitFor(() => expect(resolveChild).toEqual(expect.any(Function)));
+
+        expect(updates[updates.length - 1]).toEqual([]);
+
+        resolveChild([]);
+        await reload;
+
+        expect(updates[updates.length - 1]).toEqual(["临时页面", "后续页面"]);
+    });
 });
 
 function doc(

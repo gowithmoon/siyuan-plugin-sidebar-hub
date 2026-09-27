@@ -117,7 +117,7 @@ export function createEntrySource<TRaw, TField extends string>(
                 }
                 currentSnapshot = {
                     status: "error",
-                    sections: [],
+                    sections: currentSnapshot.sections,
                     error: error instanceof Error && error.message ? error.message : "Unable to load entries",
                 };
             }
@@ -133,7 +133,7 @@ export function createEntrySource<TRaw, TField extends string>(
             countCache = new Map();
             countGeneration = -1;
             queryVersion += 1;
-            currentSnapshot = { status: "idle", sections: [] };
+            currentSnapshot = { status: "idle", sections: currentSnapshot.sections };
         },
         setCountEnabled(enabled) {
             countEnabled = enabled;

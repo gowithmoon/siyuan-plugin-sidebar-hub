@@ -46,6 +46,7 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
     let currentInput: EntrySourceQuery<PageSortField> | undefined;
     let currentUpdate: ((snapshot: EntrySourceSnapshot) => void) | undefined;
     let countEnabled = true;
+    let hasSuccessfulSnapshot = false;
 
     return {
         sortFields: PAGE_SORT_FIELDS,
@@ -64,9 +65,11 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
             }
 
             const requestedGeneration = generation;
+            const previousSections = snapshot.sections;
+            const retainPreviousSections = hasSuccessfulSnapshot;
             const records: PageRecord[] = [];
             let scanned = 0;
-            snapshot = { status: "loading", sections: [], progress: { current: 0 } };
+            snapshot = { status: "loading", sections: previousSections, progress: { current: 0 } };
             onUpdate?.(snapshot);
 
             const publishProgress = () => {
@@ -75,7 +78,7 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
                 }
                 snapshot = {
                     status: "loading",
-                    sections: buildPageSections(records, input, countCache),
+                    sections: retainPreviousSections ? previousSections : buildPageSections(records, input, countCache),
                     progress: { current: scanned },
                 };
                 onUpdate?.(snapshot);
@@ -96,13 +99,14 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
                     sections: buildPageSections(records, input, countCache),
                     progress: { current: scanned },
                 };
+                hasSuccessfulSnapshot = true;
                 onUpdate?.(snapshot);
                 startCounts(records, requestedGeneration);
             } catch (error) {
                 if (requestVersion === queryVersion && requestedGeneration === generation) {
                     snapshot = {
                         status: "error",
-                        sections: [],
+                        sections: retainPreviousSections ? previousSections : [],
                         error: error instanceof Error && error.message ? error.message : "Unable to load pages",
                     };
                     onUpdate?.(snapshot);
@@ -144,7 +148,7 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
             cached = undefined;
             countCache = new Map();
             countGeneration = -1;
-            snapshot = { status: "idle", sections: [] };
+            snapshot = { status: "idle", sections: hasSuccessfulSnapshot ? snapshot.sections : [] };
         },
         setCountEnabled(enabled) {
             countEnabled = enabled;

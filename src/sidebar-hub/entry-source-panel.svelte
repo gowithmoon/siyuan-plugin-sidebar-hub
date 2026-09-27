@@ -327,7 +327,7 @@
         <svg class="fn__rotate" aria-hidden="true"><use href="#iconRefresh"></use></svg>
         <p>{translations.loading}</p>
     </div>
-{:else if runtimeState.snapshot.status === "error"}
+{:else if runtimeState.snapshot.status === "error" && runtimeState.snapshot.sections.length === 0}
     <div class="sidebar-hub__state" role="alert" aria-live="assertive">
         <svg aria-hidden="true"><use href="#iconInfo"></use></svg>
         <p>{translations.loadError}</p>
@@ -342,6 +342,12 @@
         <p>{runtimeState.query.trim() ? translations.noMatches : translations.empty}</p>
     </div>
 {:else}
+    {#if runtimeState.snapshot.status === "error"}
+        <div class="sidebar-hub__refresh-error" role="alert" aria-live="polite">
+            <span>{translations.loadError}</span>
+            <button type="button" class="b3-button b3-button--outline" onclick={() => runtime.refresh()}>{translations.retry}</button>
+        </div>
+    {/if}
     {#if runtimeState.snapshot.status === "loading" && runtimeState.snapshot.progress && translations.progress}
         <div class="sidebar-hub__progress" role="status" aria-live="polite">{progressLabel()}</div>
     {/if}
