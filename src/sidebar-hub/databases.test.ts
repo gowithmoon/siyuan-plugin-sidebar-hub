@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
     createDatabaseSource,
@@ -51,6 +51,8 @@ const results: DatabaseSearchResult[] = [
 
 const sort = { field: "name", direction: "asc" } as const;
 
+afterEach(() => vi.unstubAllGlobals());
+
 const datedResults: DatabaseSearchResult[] = [
     {
         avID: "20260925090000-newest",
@@ -73,6 +75,18 @@ const datedResults: DatabaseSearchResult[] = [
 ];
 
 describe("数据库导航", () => {
+    it("只为显式声明的稳定条目 key 加载计数", async () => {
+        const count = vi.fn().mockResolvedValue(7);
+        const source = createDatabaseSource({ load: vi.fn().mockResolvedValue(results), count, open: vi.fn() });
+
+        const snapshot = await source.query({ query: "", sort });
+        source.setCountTargets(["20260924090000-reading"]);
+
+        expect(snapshot.sections[0].entries.every((entry) => entry.count === undefined)).toBe(true);
+        await vi.waitFor(() => expect(count).toHaveBeenCalledOnce());
+        expect(count).toHaveBeenCalledWith("av-reading");
+    });
+
     it("异步加载每个数据库的主键总数，且最多四个请求并发", async () => {
         let active = 0;
         let peak = 0;
@@ -88,21 +102,162 @@ describe("数据库导航", () => {
         const snapshot = await source.query({ query: "", sort }, (next) => {
             updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.count ?? -1)));
         });
+        source.setCountTargets(snapshot.sections[0].entries.map((entry) => entry.key));
 
         expect(snapshot.sections[0].entries.every((entry) => entry.count === undefined)).toBe(true);
         await vi.waitFor(() => expect(count).toHaveBeenCalledTimes(2));
         expect(peak).toBeLessThanOrEqual(4);
-        expect(updates[updates.length - 1]).toEqual([12, 0]);
+        await vi.waitFor(() => expect(updates[updates.length - 1]).toEqual([12, 0]));
     });
 
-    it("停用来源时不启动计数，重新激活后才补齐", async () => {
+    it("同时处理至多四个目标计数", async () => {
+        const manyResults = Array.from({ length: 6 }, (_, index): DatabaseSearchResult => ({
+            ...results[0],
+            avID: `av-${index}`,
+            avName: `数据库 ${index}`,
+            blockID: `block-${index}`,
+            children: [],
+        }));
+        let active = 0;
+        let peak = 0;
+        const resolvers: Array<() => void> = [];
+        const count = vi.fn((_avID: string) => new Promise<number>((resolve) => {
+            active += 1;
+            peak = Math.max(peak, active);
+            resolvers.push(() => {
+                active -= 1;
+                resolve(1);
+            });
+        }));
+        const source = createDatabaseSource({ load: vi.fn().mockResolvedValue(manyResults), count, open: vi.fn() });
+        const snapshot = await source.query({ query: "", sort });
+
+        source.setCountTargets(snapshot.sections[0].entries.map((entry) => entry.key));
+
+        await vi.waitFor(() => expect(count).toHaveBeenCalledTimes(4));
+        expect(peak).toBe(4);
+        resolvers.splice(0).forEach((resolve) => resolve());
+        await vi.waitFor(() => expect(count).toHaveBeenCalledTimes(6));
+        resolvers.splice(0).forEach((resolve) => resolve());
+    });
+
+    it("同一动画帧完成的多个计数合并为一次快照发布", async () => {
+        const frames: FrameRequestCallback[] = [];
+        vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+            frames.push(callback);
+            return frames.length;
+        });
+        const source = createDatabaseSource({
+            load: vi.fn().mockResolvedValue(results),
+            count: vi.fn().mockResolvedValue(2),
+            open: vi.fn(),
+        });
+        const updates: number[][] = [];
+        const snapshot = await source.query({ query: "", sort }, (next) => {
+            updates.push(next.sections[0]?.entries.map((entry) => entry.count ?? -1) ?? []);
+        });
+
+        source.setCountTargets(snapshot.sections[0].entries.map((entry) => entry.key));
+        await vi.waitFor(() => expect(frames).toHaveLength(1));
+        expect(updates).toHaveLength(1);
+        frames[0](0);
+
+        expect(updates).toHaveLength(2);
+        expect(updates[1]).toEqual([2, 2]);
+    });
+
+    it("目标快速替换后不再启动已经离开目标集合的排队项", async () => {
+        const manyResults = Array.from({ length: 6 }, (_, index): DatabaseSearchResult => ({
+            ...results[0],
+            avID: `av-${index}`,
+            avName: `数据库 ${index}`,
+            blockID: `block-${index}`,
+            children: [],
+        }));
+        const resolvers: Array<() => void> = [];
+        const count = vi.fn((_avID: string) => new Promise<number>((resolve) => {
+            resolvers.push(() => resolve(1));
+        }));
+        const source = createDatabaseSource({ load: vi.fn().mockResolvedValue(manyResults), count, open: vi.fn() });
+        const snapshot = await source.query({ query: "", sort });
+
+        source.setCountTargets(snapshot.sections[0].entries.map((entry) => entry.key));
+        await vi.waitFor(() => expect(count).toHaveBeenCalledTimes(4));
+        source.setCountTargets(["block-5"]);
+        resolvers.splice(0).forEach((resolve) => resolve());
+
+        await vi.waitFor(() => expect(count).toHaveBeenCalledTimes(5));
+        expect(count.mock.calls.map(([avID]) => avID)).not.toContain("av-4");
+        resolvers.splice(0).forEach((resolve) => resolve());
+    });
+
+    it("滚动离开再返回时复用已缓存计数", async () => {
+        const count = vi.fn().mockResolvedValue(5);
+        const source = createDatabaseSource({ load: vi.fn().mockResolvedValue(results), count, open: vi.fn() });
+        await source.query({ query: "", sort });
+
+        source.setCountTargets(["20260924090000-reading"]);
+        await vi.waitFor(() => expect(count).toHaveBeenCalledOnce());
+        source.setCountTargets([]);
+        source.setCountTargets(["20260924090000-reading"]);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(count).toHaveBeenCalledOnce();
+    });
+
+    it("失败计数同一 generation 不重试，失效后才重试", async () => {
+        const count = vi.fn()
+            .mockRejectedValueOnce(new Error("暂时失败"))
+            .mockResolvedValueOnce(6);
+        const source = createDatabaseSource({ load: vi.fn().mockResolvedValue(results), count, open: vi.fn() });
+        await source.query({ query: "", sort });
+
+        source.setCountTargets(["20260924090000-reading"]);
+        await vi.waitFor(() => expect(count).toHaveBeenCalledOnce());
+        source.setCountTargets([]);
+        source.setCountTargets(["20260924090000-reading"]);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(count).toHaveBeenCalledOnce();
+
+        source.invalidate();
+        await source.query({ query: "", sort });
+        await vi.waitFor(() => expect(count).toHaveBeenCalledTimes(2));
+    });
+
+    it("旧 generation 的在途结果不能写回新快照", async () => {
+        const resolvers: Array<(value: number) => void> = [];
+        const count = vi.fn(() => new Promise<number>((resolve) => {
+            resolvers.push(resolve);
+        }));
+        const source = createDatabaseSource({ load: vi.fn().mockResolvedValue(results), count, open: vi.fn() });
+        const updates: number[][] = [];
+        await source.query({ query: "", sort }, (next) => {
+            updates.push(next.sections[0]?.entries.map((entry) => entry.count ?? -1) ?? []);
+        });
+        source.setCountTargets(["20260924090000-reading"]);
+        await vi.waitFor(() => expect(count).toHaveBeenCalledOnce());
+
+        source.invalidate();
+        await source.query({ query: "", sort }, (next) => {
+            updates.push(next.sections[0]?.entries.map((entry) => entry.count ?? -1) ?? []);
+        });
+        await vi.waitFor(() => expect(count).toHaveBeenCalledTimes(2));
+        resolvers[1](9);
+        await vi.waitFor(() => expect(updates[updates.length - 1]).toEqual([9, -1]));
+        resolvers[0](1);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(updates[updates.length - 1]).toEqual([9, -1]);
+    });
+
+    it("空目标不启动计数，重新声明目标后才补齐", async () => {
         const count = vi.fn().mockResolvedValue(1);
         const source = createDatabaseSource({ load: vi.fn().mockResolvedValue(results), count, open: vi.fn() });
-        source.setCountEnabled(false);
+        source.setCountTargets([]);
         await source.query({ query: "", sort });
         await Promise.resolve();
         expect(count).not.toHaveBeenCalled();
-        source.setCountEnabled(true);
+        source.setCountTargets(results.map((result) => result.blockID));
         await vi.waitFor(() => expect(count).toHaveBeenCalledTimes(2));
     });
 

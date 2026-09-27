@@ -72,7 +72,7 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
     let countGeneration = -1;
     let currentInput: EntrySourceQuery<PageSortField> | undefined;
     let currentUpdate: ((snapshot: EntrySourceSnapshot) => void) | undefined;
-    let countEnabled = true;
+    let countEnabled = false;
     let hasSuccessfulSnapshot = false;
 
     return {
@@ -269,7 +269,8 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             countGeneration = -1;
             snapshot = { status: "idle", sections: hasSuccessfulSnapshot ? snapshot.sections : [] };
         },
-        setCountEnabled(enabled) {
+        setCountTargets(keys) {
+            const enabled = keys.length > 0;
             countEnabled = enabled;
             if (countEnabled && cached && currentInput && snapshot.status === "ready") {
                 snapshot = {

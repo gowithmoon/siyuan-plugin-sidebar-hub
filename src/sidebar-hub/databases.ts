@@ -48,9 +48,10 @@ export function createDatabaseSource(dependencies: DatabaseDependencies): EntryS
         sortFields: DATABASE_SORT_FIELDS,
         load: dependencies.load,
         build: buildDatabaseSections,
-        loadCounts: dependencies.count
-            ? (results, onCount) => loadDatabaseCounts(results, dependencies.count!, onCount)
+        loadCount: dependencies.count
+            ? (results, key) => loadDatabaseCount(results, key, dependencies.count!)
             : undefined,
+        countConcurrency: 4,
         open: dependencies.open,
     });
 }
@@ -127,26 +128,13 @@ function databaseCreatedKey(avID: string) {
     return /^(\d{14})/.exec(avID)?.[1];
 }
 
-async function loadDatabaseCounts(
+async function loadDatabaseCount(
     results: DatabaseSearchResult[],
+    key: string,
     count: (avID: string) => Promise<number>,
-    onCount: (key: string, count: number) => void,
 ) {
-    const queue = [...aggregateDatabases(results)];
-    const worker = async () => {
-        while (queue.length > 0) {
-            const record = queue.shift();
-            if (!record) {
-                return;
-            }
-            try {
-                onCount(record.key, await count(record.avID));
-            } catch {
-                // 单个数据库计数失败时保留未知状态，并继续处理其他数据库。
-            }
-        }
-    };
-    await Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker));
+    const record = aggregateDatabases(results).find((candidate) => candidate.key === key);
+    return record ? count(record.avID) : undefined;
 }
 
 function flattenResults(results: DatabaseSearchResult[]): DatabaseSearchResult[] {

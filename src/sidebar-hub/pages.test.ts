@@ -34,6 +34,7 @@ describe("普通页面来源", () => {
             open: vi.fn(),
         });
         const updates: number[][] = [];
+        source.setCountTargets(["reading", "journal-other"]);
         await source.query({ query: "", sort }, (next) => {
             updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.count ?? -1)));
         });
@@ -55,14 +56,14 @@ describe("普通页面来源", () => {
             open: vi.fn(),
         });
         const updates: number[][] = [];
-        source.setCountEnabled(true);
+        source.setCountTargets(["reading", "journal-other"]);
         await source.query({ query: "", sort }, (next) => {
             updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.count ?? -1)));
         });
-        source.setCountEnabled(false);
+        source.setCountTargets([]);
         resolveCounts!({ reading: 4, "journal-other": 0 });
         await Promise.resolve();
-        source.setCountEnabled(true);
+        source.setCountTargets(["reading", "journal-other"]);
         expect(updates[updates.length - 1]).toEqual([0, 4]);
     });
 

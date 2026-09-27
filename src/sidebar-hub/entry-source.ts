@@ -34,7 +34,7 @@ export interface EntrySource<TField extends string> {
     query(input: EntrySourceQuery<TField>, onUpdate?: (snapshot: EntrySourceSnapshot) => void): Promise<EntrySourceSnapshot>;
     open(key: string): Promise<void> | void;
     invalidate(): void;
-    setCountEnabled(enabled: boolean): void;
+    setCountTargets(keys: readonly string[]): void;
 }
 
 export interface EntrySourceSnapshot {
@@ -51,7 +51,8 @@ interface EntrySourceDependencies<TRaw, TField extends string> {
     sortFields: readonly TField[];
     load: () => Promise<TRaw>;
     build: (raw: TRaw, input: EntrySourceQuery<TField>, counts: ReadonlyMap<string, number>) => EntrySourceSection[];
-    loadCounts?: (raw: TRaw, onCount: (key: string, count: number) => void) => Promise<void>;
+    loadCount?: (raw: TRaw, key: string) => Promise<number | undefined>;
+    countConcurrency?: number;
     open: (key: string) => Promise<void> | void;
 }
 
@@ -66,8 +67,10 @@ export function createEntrySource<TRaw, TField extends string>(
     let currentInput: EntrySourceQuery<TField> | undefined;
     let currentUpdate: ((snapshot: EntrySourceSnapshot) => void) | undefined;
     let countCache = new Map<string, number>();
-    let countGeneration = -1;
-    let countEnabled = true;
+    let countTargets = new Set<string>();
+    let countAttempted = new Set<string>();
+    let countInFlight = new Set<string>();
+    let countPublishGeneration: number | undefined;
 
     async function load() {
         if (cached !== undefined) {
@@ -107,10 +110,7 @@ export function createEntrySource<TRaw, TField extends string>(
                 }
                 currentSnapshot = { status: "ready", sections };
                 currentUpdate?.(currentSnapshot);
-                if (dependencies.loadCounts && countEnabled && countGeneration !== generation) {
-                    countGeneration = generation;
-                    void loadCounts(raw, generation);
-                }
+                startTargetCounts();
             } catch (error) {
                 if (requestVersion !== queryVersion) {
                     return currentSnapshot;
@@ -131,50 +131,87 @@ export function createEntrySource<TRaw, TField extends string>(
             cached = undefined;
             pending = undefined;
             countCache = new Map();
-            countGeneration = -1;
+            countAttempted = new Set();
+            countInFlight = new Set();
+            countPublishGeneration = undefined;
             queryVersion += 1;
             currentSnapshot = { status: "idle", sections: currentSnapshot.sections };
         },
-        setCountEnabled(enabled) {
-            countEnabled = enabled;
-            if (!countEnabled || cached === undefined || !dependencies.loadCounts) {
-                return;
-            }
-            if (currentInput && currentSnapshot.status === "ready") {
-                currentSnapshot = {
-                    ...currentSnapshot,
-                    sections: dependencies.build(cached, currentInput, countCache),
-                };
-                currentUpdate?.(currentSnapshot);
-            }
-            if (countGeneration !== generation) {
-                countGeneration = generation;
-                void loadCounts(cached, generation);
-            }
+        setCountTargets(keys) {
+            countTargets = new Set(keys);
+            startTargetCounts();
         },
     };
 
-    async function loadCounts(raw: TRaw, requestedGeneration: number) {
-        if (!dependencies.loadCounts) {
+    function startTargetCounts() {
+        if (!dependencies.loadCount || cached === undefined) {
             return;
         }
-        try {
-            await dependencies.loadCounts(raw, (key, count) => {
-                if (requestedGeneration !== generation) {
+
+        const concurrency = dependencies.countConcurrency ?? 1;
+        while (countInFlight.size < concurrency) {
+            const key = [...countTargets].find((candidate) =>
+                !countCache.has(candidate) && !countAttempted.has(candidate));
+            if (!key) {
+                return;
+            }
+            startCount(key);
+        }
+    }
+
+    function startCount(key: string) {
+        if (!dependencies.loadCount || cached === undefined) {
+            return;
+        }
+        const requestedGeneration = generation;
+        const raw = cached;
+        countAttempted.add(key);
+        countInFlight.add(key);
+        void dependencies.loadCount(raw, key)
+            .then((count) => {
+                if (requestedGeneration !== generation || count === undefined) {
                     return;
                 }
                 countCache.set(key, count);
-                if (!countEnabled || !currentInput || currentSnapshot.status !== "ready") {
+                scheduleCountPublish(raw, requestedGeneration);
+            })
+            .catch(() => {
+                // 失败的计数在当前 generation 保持未知状态且不自动重试。
+            })
+            .finally(() => {
+                if (requestedGeneration !== generation) {
                     return;
                 }
-                currentSnapshot = {
-                    ...currentSnapshot,
-                    sections: dependencies.build(raw, currentInput, countCache),
-                };
-                currentUpdate?.(currentSnapshot);
+                countInFlight.delete(key);
+                startTargetCounts();
             });
-        } catch {
-            // Individual count failures are intentionally left as unknown (…).
-        }
     }
+
+    function scheduleCountPublish(raw: TRaw, requestedGeneration: number) {
+        if (countPublishGeneration === requestedGeneration) {
+            return;
+        }
+        countPublishGeneration = requestedGeneration;
+        requestFrame(() => {
+            if (countPublishGeneration !== requestedGeneration || generation !== requestedGeneration) {
+                return;
+            }
+            countPublishGeneration = undefined;
+            if (!currentInput || currentSnapshot.status !== "ready") {
+                return;
+            }
+            currentSnapshot = {
+                ...currentSnapshot,
+                sections: dependencies.build(raw, currentInput, countCache),
+            };
+            currentUpdate?.(currentSnapshot);
+        });
+    }
+}
+
+function requestFrame(callback: FrameRequestCallback) {
+    if (typeof requestAnimationFrame === "function") {
+        return requestAnimationFrame(callback);
+    }
+    return setTimeout(() => callback(performance.now()), 0);
 }

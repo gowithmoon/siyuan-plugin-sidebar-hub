@@ -644,6 +644,7 @@
                 showSectionLabels={false}
                 collapsible={true}
                 nested={true}
+                virtualized={true}
                 collapsedKeys={preferences.collapsedTagPaths}
                 onCollapsedKeysChange={onTagCollapsedChange}
                 active={preferences.activeTab === "tags"}

@@ -13,6 +13,7 @@
         createFixedVirtualList,
         type FixedVirtualListWindow,
     } from "./fixed-virtual-list";
+    import { flattenTagTree, tagTreeBranchKeys, type TagTreeRow } from "./tag-tree";
 
     interface Translations {
         searchPlaceholder: string;
@@ -88,7 +89,11 @@
     let virtualScrollContainer = $state<HTMLDivElement>();
     let resetVirtualPosition = false;
     let virtualEntries = $derived(runtimeState.snapshot.sections.flatMap((section) => section.entries));
+    let virtualTreeRows = $derived(nested
+        ? flattenTagTree(virtualEntries, localCollapsedKeys, Boolean(runtimeState.query.trim()))
+        : []);
     let visibleVirtualEntries = $derived(virtualEntries.slice(virtualWindow.startIndex, virtualWindow.endIndex));
+    let visibleVirtualTreeRows = $derived(virtualTreeRows.slice(virtualWindow.startIndex, virtualWindow.endIndex));
 
     $effect(() => {
         const signature = initialCollapsedKeys.join("\u0000");
@@ -128,11 +133,25 @@
         if (!virtualized) {
             return;
         }
-        virtualWindow = virtualList.setItems(virtualEntries.map((entry) => entry.key));
+        const keys = nested
+            ? virtualTreeRows.map((row) => row.key)
+            : virtualEntries.map((entry) => entry.key);
+        virtualWindow = virtualList.setItems(keys);
         if (resetVirtualPosition) {
             virtualWindow = virtualList.resetScroll();
         }
         void syncVirtualScrollTop();
+    });
+
+    $effect(() => {
+        const keys = active
+            ? (virtualized
+                ? (nested
+                    ? visibleVirtualTreeRows.map((row) => row.key)
+                    : visibleVirtualEntries.map((entry) => entry.key))
+                : runtimeState.snapshot.sections.flatMap((section) => section.entries.map((entry) => entry.key)))
+            : [];
+        source.setCountTargets(keys);
     });
 
     $effect(() => {
@@ -294,33 +313,12 @@
     }
 
     function nestedCollapsibleKeys() {
-        const keys: string[] = [];
-        const visit = (entries: EntrySourceEntry[]) => {
-            for (const entry of entries) {
-                if (entry.children?.length) {
-                    keys.push(entry.key);
-                    visit(entry.children);
-                }
-            }
-        };
-        for (const section of runtimeState.snapshot.sections) {
-            visit(section.entries);
-        }
-        return keys;
+        return runtimeState.snapshot.sections.flatMap((section) => tagTreeBranchKeys(section.entries));
     }
 
     function nestedEntryKeys() {
-        const keys: string[] = [];
-        const visit = (entries: EntrySourceEntry[]) => {
-            for (const entry of entries) {
-                keys.push(entry.key);
-                visit(entry.children ?? []);
-            }
-        };
-        for (const section of runtimeState.snapshot.sections) {
-            visit(section.entries);
-        }
-        return keys;
+        return runtimeState.snapshot.sections.flatMap((section) =>
+            flattenTagTree(section.entries, new Set(), true).map((row) => row.key));
     }
 
     function toggleEntry(key: string) {
@@ -425,6 +423,31 @@
     {/if}
 {/snippet}
 
+{#snippet renderTreeRow(row: TagTreeRow)}
+    <div class="sidebar-hub__tree-item" style={`padding-left: ${row.depth * 18 + 4}px`}>
+        {#if row.entry.children?.length}
+            <button type="button" class="sidebar-hub__tree-toggle" aria-label={isEntryCollapsed(row.key) ? translations.expandNode : translations.collapseNode} aria-expanded={!isEntryCollapsed(row.key)} onclick={() => toggleEntry(row.key)}>
+                <svg aria-hidden="true"><use href={isEntryCollapsed(row.key) ? "#iconRight" : "#iconDown"}></use></svg>
+            </button>
+        {:else}
+            <span class="sidebar-hub__tree-toggle-spacer" aria-hidden="true"></span>
+        {/if}
+        {#if row.entry.openable === false}
+            <span class="sidebar-hub__tree-label" title={row.entry.label}>
+                <svg aria-hidden="true"><use href={`#${row.entry.icon}`}></use></svg>
+                <span class="sidebar-hub__entry-label">{row.entry.label}</span>
+                {#if row.entry.countable}<span class="sidebar-hub__entry-count">{row.entry.count ?? "…"}</span>{/if}
+            </span>
+        {:else}
+            <button type="button" class="sidebar-hub__list-item sidebar-hub__tree-label" title={row.entry.label} onclick={(event) => openEntryFromEvent(event, row.key)}>
+                <svg aria-hidden="true"><use href={`#${row.entry.icon}`}></use></svg>
+                <span class="sidebar-hub__entry-label">{row.entry.label}</span>
+                {#if row.entry.countable}<span class="sidebar-hub__entry-count">{row.entry.count ?? "…"}</span>{/if}
+            </button>
+        {/if}
+    </div>
+{/snippet}
+
 {#if runtimeState.snapshot.status === "loading" && runtimeState.snapshot.sections.length === 0}
     <div class="sidebar-hub__state" role="status" aria-live="polite">
         <svg class="fn__rotate" aria-hidden="true"><use href="#iconRefresh"></use></svg>
@@ -468,9 +491,15 @@
                     style={`transform: translateY(${virtualWindow.paddingTop}px)`}
                     aria-label={sectionLabel ?? translations.searchPlaceholder}
                 >
-                    {#each visibleVirtualEntries as entry (entry.key)}
-                        {@render renderFlatEntry(entry)}
-                    {/each}
+                    {#if nested}
+                        {#each visibleVirtualTreeRows as row (row.key)}
+                            {@render renderTreeRow(row)}
+                        {/each}
+                    {:else}
+                        {#each visibleVirtualEntries as entry (entry.key)}
+                            {@render renderFlatEntry(entry)}
+                        {/each}
+                    {/if}
                 </section>
             </div>
         {:else}
