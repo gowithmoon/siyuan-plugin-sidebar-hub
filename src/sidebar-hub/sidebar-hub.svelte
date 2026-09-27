@@ -1,7 +1,8 @@
 <script lang="ts">
-    import { showMessage, type App } from "siyuan";
+    import { Menu, showMessage, type App } from "siyuan";
 
-    import type { EntrySourceSort } from "./entry-source";
+    import type { EntrySourceEntry, EntrySourceSort } from "./entry-source";
+    import type { EntryMenuPosition } from "./entry-menu-event";
     import {
         TAB_DEFINITIONS,
         type SidebarHubPreferences,
@@ -17,7 +18,20 @@
     import { createDatabaseSource } from "./databases";
     import { loadDatabaseCount, loadDatabases, openDatabase } from "./database-siyuan";
     import { createPageSource } from "./pages";
-    import { loadPageBlockAttrs, loadPageDocRefCounts, loadPageDocuments, loadPageNotebooks, openPage } from "./page-siyuan";
+    import {
+        confirmPageDocumentRemoval,
+        loadPageBlockAttrs,
+        loadPageDocRefCounts,
+        loadPageDocumentAttributes,
+        loadPageDocuments,
+        loadPageNotebooks,
+        openPage,
+        openPageDocumentAttributes,
+        removePageDocument,
+        renamePageDocument,
+        requestPageDocumentRename,
+    } from "./page-siyuan";
+    import { createPageDocumentMenuActions } from "./page-document-menu";
     import {
         createDailyNoteNavigator,
         DailyNoteNavigationError,
@@ -82,7 +96,7 @@
         bookmarks: PanelTranslations & { groupLabel: string };
         tags: PanelTranslations;
         databases: PanelTranslations;
-        pages: PanelTranslations & { progress: string };
+        pages: PanelTranslations & { progress: string; actionError: string };
     }
 
     interface Props {
@@ -145,6 +159,27 @@
     let tagPanel: EntrySourcePanelHandle;
     let databasePanel: EntrySourcePanelHandle;
     let pagePanel: EntrySourcePanelHandle;
+    const pageDocumentMenuActions = createPageDocumentMenuActions({
+        isReadOnly: () => window.siyuan.config.readonly,
+        labels: {
+            rename: window.siyuan.languages.rename,
+            attributes: window.siyuan.languages.attr,
+            remove: window.siyuan.languages.delete,
+        },
+        requestRename: ({ title }) => requestPageDocumentRename(title),
+        renameDocument: renamePageDocument,
+        loadAttributes: loadPageDocumentAttributes,
+        openAttributes: openPageDocumentAttributes,
+        confirmRemove: ({ title }) => confirmPageDocumentRemoval(title),
+        removeDocument: removePageDocument,
+        refresh: () => pagePanel.invalidate(),
+        reportError: (error) => {
+            const message = error instanceof Error && error.message
+                ? error.message
+                : translations.pages.actionError;
+            showMessage(message, 6000, "error");
+        },
+    });
     let monthRequest = 0;
     let calendar = $derived(buildCalendarMonth(visibleYear, visibleMonth, today));
     let pickerYears = $derived(Array.from({ length: 16 }, (_, index) => yearPageEnd - 15 + index));
@@ -196,6 +231,25 @@
 
     function persistSort(tabId: SidebarTabId, sort: EntrySourceSort<string>) {
         onSortChange(tabId, sort as EntrySourceSort<SidebarHubSortField>);
+    }
+
+    function openPageDocumentMenu(entry: EntrySourceEntry, position: EntryMenuPosition) {
+        const menu = new Menu(`sidebar-hub-page-document-${entry.key}`);
+        if (menu.isOpen) {
+            return;
+        }
+        for (const action of pageDocumentMenuActions.forDocument({ id: entry.key, title: entry.label })) {
+            menu.addItem({
+                id: action.id,
+                label: action.label,
+                icon: action.icon,
+                warning: action.warning,
+                click: () => {
+                    void action.execute();
+                },
+            });
+        }
+        menu.open(position);
     }
 
     function selectVisibleDate(year: number, month: number, picker: "year" | "month") {
@@ -622,6 +676,8 @@
                 active={preferences.activeTab === "pages"}
                 initialSort={preferences.sorts.pages}
                 onSortChange={(sort) => persistSort("pages", sort)}
+                entryMenuLabel={window.siyuan.languages.more}
+                onEntryMenu={openPageDocumentMenu}
             />
         </div>
     </div>

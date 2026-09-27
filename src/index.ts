@@ -125,6 +125,7 @@ interface SidebarHubTranslations {
         noMatches: string;
         loadError: string;
         openError: string;
+        actionError: string;
         progress: string;
         sortOptions: Record<PageSortField, string>;
     };

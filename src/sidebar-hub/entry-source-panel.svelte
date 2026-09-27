@@ -8,6 +8,7 @@
         EntrySourceEntry,
         EntrySourceSort,
     } from "./entry-source";
+    import { routeEntryMenuEvent, type OpenEntryMenu } from "./entry-menu-event";
 
     interface Translations {
         searchPlaceholder: string;
@@ -42,6 +43,8 @@
         nested?: boolean;
         collapsedKeys?: string[];
         onCollapsedKeysChange?: (keys: string[]) => void;
+        entryMenuLabel?: string;
+        onEntryMenu?: OpenEntryMenu;
     }
 
     let {
@@ -57,6 +60,8 @@
         nested = false,
         collapsedKeys: initialCollapsedKeys = [],
         onCollapsedKeysChange,
+        entryMenuLabel,
+        onEntryMenu,
     }: Props = $props();
     let runtimeState = $state<EntrySourceRuntimeState<string>>();
     const initialRuntimeOptions = untrack(() => ({ source, initialSort, onSortChange }));
@@ -254,6 +259,12 @@
         void openEntry(key);
     }
 
+    function openEntryMenuFromEvent(event: MouseEvent, entry: EntrySourceEntry) {
+        if (onEntryMenu) {
+            routeEntryMenuEvent(event, entry, onEntryMenu);
+        }
+    }
+
     async function openEntry(key: string) {
         try {
             await source.open(key);
@@ -302,6 +313,14 @@
         </button>
     {/if}
 </div>
+
+{#snippet renderEntryButton(entry: EntrySourceEntry)}
+    <button type="button" class="sidebar-hub__list-item" title={entry.label} onclick={() => openEntry(entry.key)}>
+        <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
+        <span class="sidebar-hub__entry-label">{entry.label}</span>
+        {#if entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}
+    </button>
+{/snippet}
 
 {#if runtimeState.snapshot.status === "loading" && runtimeState.snapshot.sections.length === 0}
     <div class="sidebar-hub__state" role="status" aria-live="polite">
@@ -374,11 +393,23 @@
                         {@render renderEntries(section.entries)}
                     {:else}
                         {#each section.entries as entry (entry.key)}
-                            <button type="button" class="sidebar-hub__list-item" title={entry.label} onclick={() => openEntry(entry.key)}>
-                                <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
-                                <span class="sidebar-hub__entry-label">{entry.label}</span>
-                                {#if entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}
-                            </button>
+                            {#if onEntryMenu}
+                                <div class="sidebar-hub__entry-row" role="group" aria-label={entry.label} oncontextmenu={(event) => openEntryMenuFromEvent(event, entry)}>
+                                    {@render renderEntryButton(entry)}
+                                    <button
+                                        type="button"
+                                        class="block__icon ariaLabel sidebar-hub__entry-menu"
+                                        data-position="west"
+                                        aria-label={`${entryMenuLabel ?? ""}：${entry.label}`}
+                                        aria-haspopup="menu"
+                                        onclick={(event) => openEntryMenuFromEvent(event, entry)}
+                                    >
+                                        <svg aria-hidden="true"><use href="#iconMore"></use></svg>
+                                    </button>
+                                </div>
+                            {:else}
+                                {@render renderEntryButton(entry)}
+                            {/if}
                         {/each}
                     {/if}
                 {/if}

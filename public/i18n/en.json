@@ -104,6 +104,7 @@
             "noMatches": "No matching pages.",
             "loadError": "Pages could not be scanned. Try again.",
             "openError": "This page could not be opened.",
+            "actionError": "The page action failed. Try again.",
             "progress": "Scanned {current} documents",
             "sortOptions": {
                 "name": "Name",

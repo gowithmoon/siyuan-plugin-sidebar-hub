@@ -104,6 +104,7 @@
             "noMatches": "没有匹配的页面。",
             "loadError": "页面扫描失败，请重试。",
             "openError": "无法打开这个页面。",
+            "actionError": "页面操作失败，请重试。",
             "progress": "已扫描 {current} 个文档",
             "sortOptions": {
                 "name": "名称",
