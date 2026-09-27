@@ -1,3 +1,5 @@
+import type { PageSourceChange } from "./pages";
+
 export interface PageMenuDocument {
     id: string;
     title: string;
@@ -22,7 +24,7 @@ interface PageDocumentMenuDependencies {
     openAttributes: (attributes: Record<string, string>) => void;
     confirmRemove: (document: PageMenuDocument) => Promise<boolean>;
     removeDocument: (id: string) => Promise<void>;
-    refresh: () => Promise<void> | void;
+    applyChange: (change: PageSourceChange) => Promise<void> | void;
     reportError: (error: unknown) => void;
 }
 
@@ -81,7 +83,7 @@ export function createPageDocumentMenuActions(
             return;
         }
         await dependencies.renameDocument(document.id, title);
-        await dependencies.refresh();
+        await dependencies.applyChange({ kind: "rename", id: document.id, title });
     }
 
     async function editAttributes(documentId: string) {
@@ -94,7 +96,7 @@ export function createPageDocumentMenuActions(
             return;
         }
         await dependencies.removeDocument(document.id);
-        await dependencies.refresh();
+        await dependencies.applyChange({ kind: "remove", ids: [document.id] });
     }
 }
 

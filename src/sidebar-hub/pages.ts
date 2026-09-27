@@ -24,6 +24,21 @@ export interface PageDocument {
     updated: number;
 }
 
+export type PageSourceChange =
+    | { kind: "rename"; id: string; title: string }
+    | { kind: "remove"; ids: string[] }
+    | {
+        kind: "move";
+        fromNotebook: string;
+        fromPath: string;
+        toNotebook: string;
+        newPath: string;
+    };
+
+export interface PageSource extends EntrySource<PageSortField> {
+    applyChange: (change: PageSourceChange) => boolean;
+}
+
 interface PageDependencies {
     listNotebooks: () => Promise<PageNotebook[]>;
     listDocuments: (notebookId: string, path: string) => Promise<PageDocument[]>;
@@ -33,11 +48,23 @@ interface PageDependencies {
 }
 
 interface PageRecord extends PageDocument {
+    notebookId: string;
     notebookName: string;
 }
 
-export function createPageSource(dependencies: PageDependencies): EntrySource<PageSortField> {
+interface KnownDocument {
+    id: string;
+    path: string;
+    notebookId: string;
+    daily: boolean;
+    hidden: boolean;
+}
+
+export function createPageSource(dependencies: PageDependencies): PageSource {
     let cached: PageRecord[] | undefined;
+    let knownDocuments = new Map<string, KnownDocument>();
+    let dailyPaths = new Set<string>();
+    let removedDocumentIds = new Set<string>();
     let generation = 0;
     let queryVersion = 0;
     let snapshot: EntrySourceSnapshot = { status: "idle", sections: [] };
@@ -68,6 +95,8 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
             const previousSections = snapshot.sections;
             const retainPreviousSections = hasSuccessfulSnapshot;
             const records: PageRecord[] = [];
+            const nextKnownDocuments = new Map<string, KnownDocument>();
+            const nextDailyPaths = new Set<string>();
             let scanned = 0;
             snapshot = { status: "loading", sections: previousSections, progress: { current: 0 } };
             onUpdate?.(snapshot);
@@ -94,6 +123,9 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
                     return snapshot;
                 }
                 cached = records;
+                knownDocuments = nextKnownDocuments;
+                dailyPaths = nextDailyPaths;
+                removedDocumentIds = new Set();
                 snapshot = {
                     status: "ready",
                     sections: buildPageSections(records, input, countCache),
@@ -129,10 +161,22 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
                         .some((name) => name.startsWith("custom-dailynote-"));
 
                     scanned += 1;
-                    if (isDailyNote || descendantContainsDailyNote) {
+                    const hidden = isDailyNote || descendantContainsDailyNote;
+                    nextKnownDocuments.set(document.id, {
+                        id: document.id,
+                        path: document.path,
+                        notebookId: notebook.id,
+                        daily: isDailyNote,
+                        hidden,
+                    });
+                    if (isDailyNote) {
+                        nextDailyPaths.add(document.path);
+                    }
+
+                    if (hidden) {
                         pathContainsDailyNote = true;
                     } else {
-                        records.push({ ...document, notebookName: notebook.name });
+                        records.push({ ...document, notebookId: notebook.id, notebookName: notebook.name });
                     }
                     publishProgress();
                 }
@@ -142,10 +186,85 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
         open(key) {
             return dependencies.open(key);
         },
+        applyChange(change) {
+            if (!cached) {
+                return true;
+            }
+
+            if (change.kind === "rename") {
+                const record = cached.find((candidate) => candidate.id === change.id);
+                if (!record) {
+                    return true;
+                }
+                record.name = change.title;
+                publishCachedSnapshot();
+                return true;
+            }
+
+            if (change.kind === "remove") {
+                const ids = [...new Set(change.ids.filter(Boolean))];
+                if (ids.length === 0) {
+                    return false;
+                }
+                if (ids.every((id) => removedDocumentIds.has(id))) {
+                    return true;
+                }
+                const documents = ids.map((id) => knownDocuments.get(id));
+                if (documents.some((document, index) => !document && !removedDocumentIds.has(ids[index]))) {
+                    return false;
+                }
+                if (documents.some((document) => document?.daily)) {
+                    return false;
+                }
+                const rootDocuments = documents.filter((document): document is KnownDocument => Boolean(document));
+                const removed = new Set(ids);
+                for (const [id, document] of knownDocuments) {
+                    if (rootDocuments.some((root) => root.notebookId === document.notebookId
+                        && isDescendantPath(document.path, root.path))) {
+                        if (document.daily) {
+                            return false;
+                        }
+                        removed.add(id);
+                    }
+                }
+                cached = cached.filter((record) => !removed.has(record.id));
+                for (const id of removed) {
+                    knownDocuments.delete(id);
+                    removedDocumentIds.add(id);
+                    countCache.delete(id);
+                }
+                publishCachedSnapshot();
+                return true;
+            }
+
+            if (change.fromNotebook !== change.toNotebook) {
+                return false;
+            }
+            const id = documentIdFromPath(change.fromPath);
+            if (!id || id !== documentIdFromPath(change.newPath)) {
+                return false;
+            }
+            const known = knownDocuments.get(id);
+            const record = cached.find((candidate) => candidate.id === id);
+            if (known?.path === change.newPath && record?.path === change.newPath) {
+                return true;
+            }
+            if (!known || !record || known.hidden || record.notebookId !== change.fromNotebook
+                || record.path !== change.fromPath || isDailyRelatedPath(change.newPath)) {
+                return false;
+            }
+            record.path = change.newPath;
+            known.path = change.newPath;
+            publishCachedSnapshot();
+            return true;
+        },
         invalidate() {
             generation += 1;
             queryVersion += 1;
             cached = undefined;
+            knownDocuments = new Map();
+            dailyPaths = new Set();
+            removedDocumentIds = new Set();
             countCache = new Map();
             countGeneration = -1;
             snapshot = { status: "idle", sections: hasSuccessfulSnapshot ? snapshot.sections : [] };
@@ -164,6 +283,25 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
             }
         },
     };
+
+    function publishCachedSnapshot() {
+        if (!cached || !currentInput) {
+            return;
+        }
+        snapshot = {
+            ...snapshot,
+            status: "ready",
+            sections: buildPageSections(cached, currentInput, countCache),
+            progress: undefined,
+            error: undefined,
+        };
+        currentUpdate?.(snapshot);
+    }
+
+    function isDailyRelatedPath(path: string) {
+        return [...dailyPaths].some((dailyPath) =>
+            path === dailyPath || isDescendantPath(path, dailyPath) || isDescendantPath(dailyPath, path));
+    }
 
     function startCounts(records: PageRecord[], requestedGeneration: number) {
         if (!countEnabled || !dependencies.getDocRefCounts || countGeneration === requestedGeneration) {
@@ -196,6 +334,15 @@ export function createPageSource(dependencies: PageDependencies): EntrySource<Pa
             // 失败的页面计数保持未知状态，不影响页面列表。
         }
     }
+}
+
+function documentIdFromPath(path: string) {
+    const match = /\/([^/]+)\.sy$/.exec(path);
+    return match?.[1];
+}
+
+function isDescendantPath(path: string, ancestor: string) {
+    return path.startsWith(`${ancestor}/`);
 }
 
 function buildPageSections(

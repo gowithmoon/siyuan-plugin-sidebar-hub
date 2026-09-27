@@ -43,8 +43,12 @@ describe("思源事件触发的来源失效", () => {
         expect(sourceInvalidationForEvent("ws-main", { cmd: "refreshAttributeView" })).toEqual({
             tabs: ["databases"],
         });
-        expect(sourceInvalidationForEvent("ws-main", { cmd: "rename" })).toEqual({
+        expect(sourceInvalidationForEvent("ws-main", {
+            cmd: "rename",
+            data: { id: "doc-id", title: "新标题" },
+        })).toEqual({
             tabs: ["pages"],
+            pageChange: { kind: "rename", id: "doc-id", title: "新标题" },
         });
         expect(sourceInvalidationForEvent("ws-main", { cmd: "savedoc" })).toEqual({
             tabs: ["pages"],
@@ -55,6 +59,35 @@ describe("思源事件触发的来源失效", () => {
         expect(sourceInvalidationForEvent("ws-main", { cmd: "removeDoc" })).toEqual({
             tabs: ["bookmarks", "tags", "databases", "pages"],
         });
+        expect(sourceInvalidationForEvent("ws-main", {
+            cmd: "removeDoc",
+            data: { ids: ["doc-id"] },
+        })).toEqual({
+            tabs: ["bookmarks", "tags", "databases", "pages"],
+            pageChange: { kind: "remove", ids: ["doc-id"] },
+        });
+        expect(sourceInvalidationForEvent("ws-main", {
+            cmd: "moveDoc",
+            data: {
+                fromNotebook: "work",
+                fromPath: "/old.sy",
+                toNotebook: "work",
+                newPath: "/new.sy",
+            },
+        })).toEqual({
+            tabs: ["pages"],
+            pageChange: {
+                kind: "move",
+                fromNotebook: "work",
+                fromPath: "/old.sy",
+                toNotebook: "work",
+                newPath: "/new.sy",
+            },
+        });
+        expect(sourceInvalidationForEvent("ws-main", {
+            cmd: "moveDocs",
+            data: { moves: [] },
+        })).toEqual({ tabs: ["pages"] });
         expect(sourceInvalidationForEvent("ws-main", { cmd: "mount" })).toEqual({
             tabs: ["bookmarks", "tags", "databases", "pages"],
         });

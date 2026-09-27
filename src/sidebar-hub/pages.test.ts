@@ -236,6 +236,117 @@ describe("普通页面来源", () => {
 
         expect(updates[updates.length - 1]).toEqual(["临时页面", "后续页面"]);
     });
+
+    it("重命名可直接更新缓存而不重新扫描", async () => {
+        const listNotebooks = vi.fn().mockResolvedValue(notebooks.slice(2));
+        const listDocuments = vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []);
+        const source = createPageSource({
+            listNotebooks,
+            listDocuments,
+            getBlockAttrs: vi.fn(async () => ({})),
+            open: vi.fn(),
+        });
+
+        await source.query({ query: "", sort });
+        const callsBefore = listDocuments.mock.calls.length;
+
+        expect(source.applyChange({ kind: "rename", id: "reading", title: "新标题" })).toBe(true);
+        expect(source.snapshot.sections[0].entries.map((entry) => entry.label)).toContain("新标题");
+        expect(listNotebooks).toHaveBeenCalledOnce();
+        expect(listDocuments).toHaveBeenCalledTimes(callsBefore);
+    });
+
+    it("删除普通页面可直接移除，删除日记文档要求回退", async () => {
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(0, 1)),
+            listDocuments: vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []),
+            getBlockAttrs: vi.fn(async (ids: string[]) => Object.fromEntries(ids.map((id) => [
+                id,
+                id === "daily" ? { "custom-dailynote-20260925": "20260925" } : {},
+            ]))),
+            open: vi.fn(),
+        });
+
+        await source.query({ query: "", sort });
+        expect(source.applyChange({ kind: "remove", ids: ["guide"] })).toBe(true);
+        expect(source.snapshot.sections).toEqual([]);
+        expect(source.applyChange({ kind: "remove", ids: ["daily"] })).toBe(false);
+    });
+
+    it("删除父页面时同时移除已扫描的普通子页面", async () => {
+        const documents: Record<string, PageDocument[]> = {
+            "work:/": [doc("parent", "/parent.sy", "父页面", 1)],
+            "work:/parent.sy": [doc("child", "/parent.sy/child.sy", "子页面")],
+        };
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue([{ id: "work", name: "工作", closed: false }]),
+            listDocuments: vi.fn(async (notebookId: string, path: string) => documents[`${notebookId}:${path}`] ?? []),
+            getBlockAttrs: vi.fn(async () => ({})),
+            open: vi.fn(),
+        });
+
+        await source.query({ query: "", sort });
+        expect(new Set(source.snapshot.sections[0].entries.map((entry) => entry.key)))
+            .toEqual(new Set(["child", "parent"]));
+        expect(source.applyChange({ kind: "remove", ids: ["parent"] })).toBe(true);
+        expect(source.snapshot.sections).toEqual([]);
+        expect(source.applyChange({ kind: "remove", ids: ["parent", "child"] })).toBe(true);
+    });
+
+    it("同一笔记本的普通页面移动可更新路径，移入日记文档子树时回退", async () => {
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(0, 1)),
+            listDocuments: vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []),
+            getBlockAttrs: vi.fn(async (ids: string[]) => Object.fromEntries(ids.map((id) => [
+                id,
+                id === "daily" ? { "custom-dailynote-20260925": "20260925" } : {},
+            ]))),
+            open: vi.fn(),
+        });
+
+        await source.query({ query: "", sort });
+        expect(source.applyChange({
+            kind: "move",
+            fromNotebook: "work",
+            fromPath: "/guide.sy",
+            toNotebook: "work",
+            newPath: "/other.sy/guide.sy",
+        })).toBe(true);
+        expect(source.applyChange({
+            kind: "move",
+            fromNotebook: "work",
+            fromPath: "/other.sy/guide.sy",
+            toNotebook: "work",
+            newPath: "/year/month/daily.sy/guide.sy",
+        })).toBe(false);
+    });
+
+    it("重复删除和重复移动事件不会再次触发回退", async () => {
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(2)),
+            listDocuments: vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []),
+            getBlockAttrs: vi.fn(async () => ({})),
+            open: vi.fn(),
+        });
+
+        await source.query({ query: "", sort });
+        expect(source.applyChange({
+            kind: "move",
+            fromNotebook: "life",
+            fromPath: "/reading.sy",
+            toNotebook: "life",
+            newPath: "/archive.sy/reading.sy",
+        })).toBe(true);
+        expect(source.applyChange({
+            kind: "move",
+            fromNotebook: "life",
+            fromPath: "/reading.sy",
+            toNotebook: "life",
+            newPath: "/archive.sy/reading.sy",
+        })).toBe(true);
+        expect(source.applyChange({ kind: "remove", ids: ["reading"] })).toBe(true);
+        expect(source.applyChange({ kind: "remove", ids: ["reading"] })).toBe(true);
+    });
 });
 
 function doc(

@@ -14,7 +14,7 @@ describe("页面文档菜单动作", () => {
             openAttributes: vi.fn(),
             confirmRemove: vi.fn(),
             removeDocument: vi.fn(),
-            refresh: vi.fn(),
+            applyChange: vi.fn(),
             reportError: vi.fn(),
         });
 
@@ -30,15 +30,15 @@ describe("页面文档菜单动作", () => {
             .toEqual(["attributes"]);
     });
 
-    it("重命名成功后刷新，取消、空白或未变化名称不发请求", async () => {
+    it("重命名成功后应用局部变更，取消、空白或未变化名称不发请求", async () => {
         const requestRename = vi.fn()
             .mockResolvedValueOnce(" 新名称 ")
             .mockResolvedValueOnce(null)
             .mockResolvedValueOnce("   ")
             .mockResolvedValueOnce("文档");
         const renameDocument = vi.fn();
-        const refresh = vi.fn();
-        const actions = createActions({ requestRename, renameDocument, refresh });
+        const applyChange = vi.fn();
+        const actions = createActions({ requestRename, renameDocument, applyChange });
         const document = { id: "doc-id", title: "文档" };
 
         for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -48,7 +48,7 @@ describe("页面文档菜单动作", () => {
         expect(requestRename).toHaveBeenCalledTimes(4);
         expect(renameDocument).toHaveBeenCalledOnce();
         expect(renameDocument).toHaveBeenCalledWith("doc-id", "新名称");
-        expect(refresh).toHaveBeenCalledOnce();
+        expect(applyChange).toHaveBeenCalledWith({ kind: "rename", id: "doc-id", title: "新名称" });
     });
 
     it("提交包含路径分隔符或控制字符的名称时保留原名称", async () => {
@@ -78,13 +78,13 @@ describe("页面文档菜单动作", () => {
         expect(openAttributes).toHaveBeenCalledWith(attributes);
     });
 
-    it("删除仅在确认后按文档 ID 请求，并在成功后刷新", async () => {
+    it("删除仅在确认后按文档 ID 请求，并在成功后应用局部变更", async () => {
         const confirmRemove = vi.fn()
             .mockResolvedValueOnce(false)
             .mockResolvedValueOnce(true);
         const removeDocument = vi.fn();
-        const refresh = vi.fn();
-        const actions = createActions({ confirmRemove, removeDocument, refresh });
+        const applyChange = vi.fn();
+        const actions = createActions({ confirmRemove, removeDocument, applyChange });
         const document = { id: "doc-id", title: "文档" };
 
         await action(actions, "remove", document).execute();
@@ -93,22 +93,22 @@ describe("页面文档菜单动作", () => {
         await action(actions, "remove", document).execute();
         expect(confirmRemove).toHaveBeenCalledWith(document);
         expect(removeDocument).toHaveBeenCalledWith("doc-id");
-        expect(refresh).toHaveBeenCalledOnce();
+        expect(applyChange).toHaveBeenCalledWith({ kind: "remove", ids: ["doc-id"] });
     });
 
     it.each([
         ["rename", { requestRename: vi.fn().mockResolvedValue("新名称"), renameDocument: failing() }],
         ["attributes", { loadAttributes: failing() }],
         ["remove", { confirmRemove: vi.fn().mockResolvedValue(true), removeDocument: failing() }],
-    ] as const)("%s 失败时提示错误且不刷新", async (id, overrides) => {
+    ] as const)("%s 失败时提示错误且不应用变更", async (id, overrides) => {
         const reportError = vi.fn();
-        const refresh = vi.fn();
-        const actions = createActions({ ...overrides, reportError, refresh });
+        const applyChange = vi.fn();
+        const actions = createActions({ ...overrides, reportError, applyChange });
 
         await expect(action(actions, id).execute()).resolves.toBeUndefined();
 
         expect(reportError).toHaveBeenCalledWith(expect.objectContaining({ message: "操作失败" }));
-        expect(refresh).not.toHaveBeenCalled();
+        expect(applyChange).not.toHaveBeenCalled();
     });
 });
 
@@ -126,7 +126,7 @@ function createActions(overrides: Record<string, unknown> = {}) {
         openAttributes: vi.fn(),
         confirmRemove: vi.fn(),
         removeDocument: vi.fn(),
-        refresh: vi.fn(),
+        applyChange: vi.fn(),
         reportError: vi.fn(),
         ...overrides,
     });

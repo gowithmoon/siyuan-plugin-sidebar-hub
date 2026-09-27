@@ -17,7 +17,7 @@
     import { loadTags, openTag } from "./tag-siyuan";
     import { createDatabaseSource } from "./databases";
     import { loadDatabaseCount, loadDatabases, openDatabase } from "./database-siyuan";
-    import { createPageSource } from "./pages";
+    import { createPageSource, type PageSourceChange } from "./pages";
     import {
         confirmPageDocumentRemoval,
         loadPageBlockAttrs,
@@ -172,7 +172,7 @@
         openAttributes: openPageDocumentAttributes,
         confirmRemove: ({ title }) => confirmPageDocumentRemoval(title),
         removeDocument: removePageDocument,
-        refresh: () => pagePanel.invalidate(),
+        applyChange: applyPageChange,
         reportError: (error) => {
             const message = error instanceof Error && error.message
                 ? error.message
@@ -226,7 +226,18 @@
             databases: databasePanel,
             pages: pagePanel,
         };
-        await Promise.all(invalidation.tabs.map((tabId) => panels[tabId]?.invalidate()));
+        await Promise.all(invalidation.tabs.map((tabId) => {
+            if (tabId === "pages" && invalidation.pageChange) {
+                return applyPageChange(invalidation.pageChange);
+            }
+            return panels[tabId]?.invalidate();
+        }));
+    }
+
+    async function applyPageChange(change: PageSourceChange) {
+        if (!pageSource.applyChange(change)) {
+            await pagePanel.invalidate();
+        }
     }
 
     function persistSort(tabId: SidebarTabId, sort: EntrySourceSort<string>) {

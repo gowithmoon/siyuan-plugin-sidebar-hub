@@ -1,9 +1,11 @@
 import type { IOperation, IWebSocketData } from "siyuan";
 
 import { SIDEBAR_TAB_IDS, type SidebarTabId } from "./preferences";
+import type { PageSourceChange } from "./pages";
 
 export interface SourceInvalidation {
     tabs: SidebarTabId[];
+    pageChange?: PageSourceChange;
 }
 
 const ALL_TABS = [...SIDEBAR_TAB_IDS];
@@ -53,10 +55,44 @@ export function sourceInvalidationForEvent(
         return ALL_SOURCES;
     }
     if (detail?.cmd && DOCUMENT_REMOVAL_COMMANDS.has(detail.cmd)) {
-        return { tabs: ["bookmarks", "tags", "databases", "pages"] };
+        return withPageChange(
+            { tabs: ["bookmarks", "tags", "databases", "pages"] },
+            parsePageChange(detail.cmd, detail.data),
+        );
     }
     if (detail?.cmd && PAGE_COMMANDS.has(detail.cmd)) {
-        return { tabs: ["pages"] };
+        return withPageChange({ tabs: ["pages"] }, parsePageChange(detail.cmd, detail.data));
+    }
+    return undefined;
+}
+
+function withPageChange(base: SourceInvalidation, pageChange: PageSourceChange | undefined): SourceInvalidation {
+    return pageChange ? { ...base, pageChange } : base;
+}
+
+function parsePageChange(cmd: string, data: unknown): PageSourceChange | undefined {
+    if (!isRecord(data)) {
+        return undefined;
+    }
+    if (cmd === "rename" && typeof data.id === "string" && typeof data.title === "string") {
+        return { kind: "rename", id: data.id, title: data.title };
+    }
+    if (cmd === "removeDoc" && Array.isArray(data.ids)
+        && data.ids.every((id): id is string => typeof id === "string")) {
+        return { kind: "remove", ids: data.ids };
+    }
+    if (cmd === "moveDoc"
+        && typeof data.fromNotebook === "string"
+        && typeof data.fromPath === "string"
+        && typeof data.toNotebook === "string"
+        && typeof data.newPath === "string") {
+        return {
+            kind: "move",
+            fromNotebook: data.fromNotebook,
+            fromPath: data.fromPath,
+            toNotebook: data.toNotebook,
+            newPath: data.newPath,
+        };
     }
     return undefined;
 }
