@@ -665,6 +665,7 @@
                 emptyIcon="iconDatabase"
                 sectionLabel={translations.tabs.databases}
                 showSectionLabels={false}
+                virtualized={true}
                 active={preferences.activeTab === "databases"}
                 initialSort={preferences.sorts.databases}
                 onSortChange={(sort) => persistSort("databases", sort)}

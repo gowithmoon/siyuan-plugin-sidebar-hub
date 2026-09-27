@@ -350,6 +350,26 @@
     overflow: auto;
 }
 
+.sidebar-hub__entry-list--virtual {
+    padding: 0 4px;
+}
+
+.sidebar-hub__entry-list--virtual .sidebar-hub__list-item {
+    height: 31px;
+}
+
+.sidebar-hub__virtual-content {
+    position: relative;
+    min-width: 0;
+}
+
+.sidebar-hub__virtual-window {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+}
+
 .sidebar-hub__entry-list[aria-busy="true"] {
     opacity: 0.72;
 }

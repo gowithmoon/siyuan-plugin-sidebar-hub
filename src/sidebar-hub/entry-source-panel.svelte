@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onDestroy, untrack } from "svelte";
+    import { onDestroy, tick, untrack } from "svelte";
     import { Menu, showMessage } from "siyuan";
 
     import { createEntrySourceRuntime, type EntrySourceRuntimeState } from "./entry-source-runtime";
@@ -9,6 +9,10 @@
         EntrySourceSort,
     } from "./entry-source";
     import { routeEntryMenuEvent, type OpenEntryMenu } from "./entry-menu-event";
+    import {
+        createFixedVirtualList,
+        type FixedVirtualListWindow,
+    } from "./fixed-virtual-list";
 
     interface Translations {
         searchPlaceholder: string;
@@ -45,6 +49,7 @@
         onCollapsedKeysChange?: (keys: string[]) => void;
         entryMenuLabel?: string;
         onEntryMenu?: OpenEntryMenu;
+        virtualized?: boolean;
     }
 
     let {
@@ -62,6 +67,7 @@
         onCollapsedKeysChange,
         entryMenuLabel,
         onEntryMenu,
+        virtualized = false,
     }: Props = $props();
     let runtimeState = $state<EntrySourceRuntimeState<string>>();
     const initialRuntimeOptions = untrack(() => ({ source, initialSort, onSortChange }));
@@ -77,6 +83,12 @@
     let searchCollapsedBackup: Set<string> | undefined;
     let previousQuery = "";
     let lastCleanedSectionSignature: string | undefined;
+    const virtualList = createFixedVirtualList();
+    let virtualWindow = $state<FixedVirtualListWindow>(virtualList.window);
+    let virtualScrollContainer = $state<HTMLDivElement>();
+    let resetVirtualPosition = false;
+    let virtualEntries = $derived(runtimeState.snapshot.sections.flatMap((section) => section.entries));
+    let visibleVirtualEntries = $derived(virtualEntries.slice(virtualWindow.startIndex, virtualWindow.endIndex));
 
     $effect(() => {
         const signature = initialCollapsedKeys.join("\u0000");
@@ -91,6 +103,42 @@
 
     $effect(() => {
         void runtime.setActive(active);
+    });
+
+    $effect(() => {
+        if (!virtualized || !active) {
+            return;
+        }
+        const frame = requestAnimationFrame(() => measureVirtualViewport());
+        return () => cancelAnimationFrame(frame);
+    });
+
+    $effect(() => {
+        if (!virtualized || !virtualScrollContainer) {
+            return;
+        }
+        const container = virtualScrollContainer;
+        const observer = new ResizeObserver(() => measureVirtualViewport());
+        observer.observe(container);
+        measureVirtualViewport();
+        return () => observer.disconnect();
+    });
+
+    $effect(() => {
+        if (!virtualized) {
+            return;
+        }
+        virtualWindow = virtualList.setItems(virtualEntries.map((entry) => entry.key));
+        if (resetVirtualPosition) {
+            virtualWindow = virtualList.resetScroll();
+        }
+        void syncVirtualScrollTop();
+    });
+
+    $effect(() => {
+        if (runtimeState.loadedQuery !== undefined) {
+            resetVirtualPosition = false;
+        }
     });
 
     $effect(() => {
@@ -134,10 +182,12 @@
     }
 
     function changeQuery(event: Event) {
+        resetVirtualScroll();
         runtime.setQuery((event.currentTarget as HTMLInputElement).value);
     }
 
     function setSortField(field: string) {
+        resetVirtualScroll();
         void runtime.setSortField(field);
     }
 
@@ -164,7 +214,40 @@
     }
 
     function toggleSortDirection() {
+        resetVirtualScroll();
         void runtime.toggleSortDirection();
+    }
+
+    function resetVirtualScroll() {
+        if (!virtualized) {
+            return;
+        }
+        resetVirtualPosition = true;
+        virtualWindow = virtualList.resetScroll();
+        if (virtualScrollContainer) {
+            virtualScrollContainer.scrollTop = 0;
+        }
+    }
+
+    function measureVirtualViewport() {
+        if (!virtualScrollContainer) {
+            return;
+        }
+        virtualWindow = virtualList.setViewportHeight(virtualScrollContainer.clientHeight);
+        if (virtualScrollContainer.scrollTop !== virtualWindow.scrollTop) {
+            virtualScrollContainer.scrollTop = virtualWindow.scrollTop;
+        }
+    }
+
+    function scrollVirtualList(event: Event) {
+        virtualWindow = virtualList.setScrollTop((event.currentTarget as HTMLDivElement).scrollTop);
+    }
+
+    async function syncVirtualScrollTop() {
+        await tick();
+        if (virtualScrollContainer && virtualScrollContainer.scrollTop !== virtualWindow.scrollTop) {
+            virtualScrollContainer.scrollTop = virtualWindow.scrollTop;
+        }
     }
 
     function isSectionCollapsed(key: string) {
@@ -322,6 +405,26 @@
     </button>
 {/snippet}
 
+{#snippet renderFlatEntry(entry: EntrySourceEntry)}
+    {#if onEntryMenu}
+        <div class="sidebar-hub__entry-row" role="group" aria-label={entry.label} oncontextmenu={(event) => openEntryMenuFromEvent(event, entry)}>
+            {@render renderEntryButton(entry)}
+            <button
+                type="button"
+                class="block__icon ariaLabel sidebar-hub__entry-menu"
+                data-position="west"
+                aria-label={`${entryMenuLabel ?? ""}：${entry.label}`}
+                aria-haspopup="menu"
+                onclick={(event) => openEntryMenuFromEvent(event, entry)}
+            >
+                <svg aria-hidden="true"><use href="#iconMore"></use></svg>
+            </button>
+        </div>
+    {:else}
+        {@render renderEntryButton(entry)}
+    {/if}
+{/snippet}
+
 {#if runtimeState.snapshot.status === "loading" && runtimeState.snapshot.sections.length === 0}
     <div class="sidebar-hub__state" role="status" aria-live="polite">
         <svg class="fn__rotate" aria-hidden="true"><use href="#iconRefresh"></use></svg>
@@ -351,75 +454,79 @@
     {#if runtimeState.snapshot.status === "loading" && runtimeState.snapshot.progress && translations.progress}
         <div class="sidebar-hub__progress" role="status" aria-live="polite">{progressLabel()}</div>
     {/if}
-    <div class="sidebar-hub__entry-list" aria-busy={runtimeState.snapshot.status === "loading"}>
-        {#each runtimeState.snapshot.sections as section (section.key)}
-            <section class="sidebar-hub__entry-section" aria-label={sectionLabel ?? translations.searchPlaceholder}>
-                {#if showSectionLabels && section.label}
-                    {#if collapsible}
-                        <button type="button" class="sidebar-hub__section-toggle" aria-expanded={!isSectionCollapsed(section.key)} onclick={() => toggleSection(section.key)}>
-                            <svg aria-hidden="true"><use href={isSectionCollapsed(section.key) ? "#iconRight" : "#iconDown"}></use></svg>
-                            <span class="sidebar-hub__entry-label">{section.label}</span>
-                            {#if section.countable}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}
-                        </button>
-                    {:else}
-                        <h3><span class="sidebar-hub__entry-label">{section.label}</span>{#if section.countable}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}</h3>
+    <div
+        bind:this={virtualScrollContainer}
+        class:sidebar-hub__entry-list--virtual={virtualized}
+        class="sidebar-hub__entry-list"
+        aria-busy={runtimeState.snapshot.status === "loading"}
+        onscroll={virtualized ? scrollVirtualList : undefined}
+    >
+        {#if virtualized}
+            <div class="sidebar-hub__virtual-content" style={`height: ${virtualWindow.totalHeight}px`}>
+                <section
+                    class="sidebar-hub__entry-section sidebar-hub__virtual-window"
+                    style={`transform: translateY(${virtualWindow.paddingTop}px)`}
+                    aria-label={sectionLabel ?? translations.searchPlaceholder}
+                >
+                    {#each visibleVirtualEntries as entry (entry.key)}
+                        {@render renderFlatEntry(entry)}
+                    {/each}
+                </section>
+            </div>
+        {:else}
+            {#each runtimeState.snapshot.sections as section (section.key)}
+                <section class="sidebar-hub__entry-section" aria-label={sectionLabel ?? translations.searchPlaceholder}>
+                    {#if showSectionLabels && section.label}
+                        {#if collapsible}
+                            <button type="button" class="sidebar-hub__section-toggle" aria-expanded={!isSectionCollapsed(section.key)} onclick={() => toggleSection(section.key)}>
+                                <svg aria-hidden="true"><use href={isSectionCollapsed(section.key) ? "#iconRight" : "#iconDown"}></use></svg>
+                                <span class="sidebar-hub__entry-label">{section.label}</span>
+                                {#if section.countable}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}
+                            </button>
+                        {:else}
+                            <h3><span class="sidebar-hub__entry-label">{section.label}</span>{#if section.countable}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}</h3>
+                        {/if}
                     {/if}
-                {/if}
-                {#if !isSectionCollapsed(section.key)}
-                    {#if nested}
-                        {#snippet renderEntries(entries: EntrySourceEntry[], depth = 0)}
-                            {#each entries as entry (entry.key)}
-                                <div class="sidebar-hub__tree-item" style={`padding-left: ${depth * 18 + 4}px`}>
-                                    {#if entry.children?.length}
-                                        <button type="button" class="sidebar-hub__tree-toggle" aria-label={isEntryCollapsed(entry.key) ? translations.expandNode : translations.collapseNode} aria-expanded={!isEntryCollapsed(entry.key)} onclick={() => toggleEntry(entry.key)}>
-                                            <svg aria-hidden="true"><use href={isEntryCollapsed(entry.key) ? "#iconRight" : "#iconDown"}></use></svg>
-                                        </button>
-                                    {:else}
-                                        <span class="sidebar-hub__tree-toggle-spacer" aria-hidden="true"></span>
+                    {#if !isSectionCollapsed(section.key)}
+                        {#if nested}
+                            {#snippet renderEntries(entries: EntrySourceEntry[], depth = 0)}
+                                {#each entries as entry (entry.key)}
+                                    <div class="sidebar-hub__tree-item" style={`padding-left: ${depth * 18 + 4}px`}>
+                                        {#if entry.children?.length}
+                                            <button type="button" class="sidebar-hub__tree-toggle" aria-label={isEntryCollapsed(entry.key) ? translations.expandNode : translations.collapseNode} aria-expanded={!isEntryCollapsed(entry.key)} onclick={() => toggleEntry(entry.key)}>
+                                                <svg aria-hidden="true"><use href={isEntryCollapsed(entry.key) ? "#iconRight" : "#iconDown"}></use></svg>
+                                            </button>
+                                        {:else}
+                                            <span class="sidebar-hub__tree-toggle-spacer" aria-hidden="true"></span>
+                                        {/if}
+                                        {#if entry.openable === false}
+                                            <span class="sidebar-hub__tree-label" title={entry.label}>
+                                                <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
+                                                <span class="sidebar-hub__entry-label">{entry.label}</span>
+                                                {#if entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}
+                                            </span>
+                                        {:else}
+                                            <button type="button" class="sidebar-hub__list-item sidebar-hub__tree-label" title={entry.label} onclick={(event) => openEntryFromEvent(event, entry.key)}>
+                                                <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
+                                                <span class="sidebar-hub__entry-label">{entry.label}</span>
+                                                {#if entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}
+                                            </button>
+                                        {/if}
+                                    </div>
+                                    {#if entry.children?.length && !isEntryCollapsed(entry.key)}
+                                        {@render renderEntries(entry.children, depth + 1)}
                                     {/if}
-                                    {#if entry.openable === false}
-                                        <span class="sidebar-hub__tree-label" title={entry.label}>
-                                            <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
-                                            <span class="sidebar-hub__entry-label">{entry.label}</span>
-                                            {#if entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}
-                                        </span>
-                                    {:else}
-                                        <button type="button" class="sidebar-hub__list-item sidebar-hub__tree-label" title={entry.label} onclick={(event) => openEntryFromEvent(event, entry.key)}>
-                                            <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
-                                            <span class="sidebar-hub__entry-label">{entry.label}</span>
-                                            {#if entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}
-                                        </button>
-                                    {/if}
-                                </div>
-                                {#if entry.children?.length && !isEntryCollapsed(entry.key)}
-                                    {@render renderEntries(entry.children, depth + 1)}
-                                {/if}
+                                {/each}
+                            {/snippet}
+                            {@render renderEntries(section.entries)}
+                        {:else}
+                            {#each section.entries as entry (entry.key)}
+                                {@render renderFlatEntry(entry)}
                             {/each}
-                        {/snippet}
-                        {@render renderEntries(section.entries)}
-                    {:else}
-                        {#each section.entries as entry (entry.key)}
-                            {#if onEntryMenu}
-                                <div class="sidebar-hub__entry-row" role="group" aria-label={entry.label} oncontextmenu={(event) => openEntryMenuFromEvent(event, entry)}>
-                                    {@render renderEntryButton(entry)}
-                                    <button
-                                        type="button"
-                                        class="block__icon ariaLabel sidebar-hub__entry-menu"
-                                        data-position="west"
-                                        aria-label={`${entryMenuLabel ?? ""}：${entry.label}`}
-                                        aria-haspopup="menu"
-                                        onclick={(event) => openEntryMenuFromEvent(event, entry)}
-                                    >
-                                        <svg aria-hidden="true"><use href="#iconMore"></use></svg>
-                                    </button>
-                                </div>
-                            {:else}
-                                {@render renderEntryButton(entry)}
-                            {/if}
-                        {/each}
+                        {/if}
                     {/if}
-                {/if}
-            </section>
-        {/each}
+                </section>
+            {/each}
+        {/if}
     </div>
 {/if}
