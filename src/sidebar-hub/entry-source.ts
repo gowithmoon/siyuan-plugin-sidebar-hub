@@ -69,7 +69,7 @@ export function createEntrySource<TRaw, TField extends string>(
     let countCache = new Map<string, number>();
     let countTargets = new Set<string>();
     let countAttempted = new Set<string>();
-    let countInFlight = new Set<string>();
+    let activeCountRequests = 0;
     let countPublishGeneration: number | undefined;
 
     async function load() {
@@ -132,7 +132,6 @@ export function createEntrySource<TRaw, TField extends string>(
             pending = undefined;
             countCache = new Map();
             countAttempted = new Set();
-            countInFlight = new Set();
             countPublishGeneration = undefined;
             queryVersion += 1;
             currentSnapshot = { status: "idle", sections: currentSnapshot.sections };
@@ -149,7 +148,7 @@ export function createEntrySource<TRaw, TField extends string>(
         }
 
         const concurrency = dependencies.countConcurrency ?? 1;
-        while (countInFlight.size < concurrency) {
+        while (activeCountRequests < concurrency) {
             const key = [...countTargets].find((candidate) =>
                 !countCache.has(candidate) && !countAttempted.has(candidate));
             if (!key) {
@@ -166,7 +165,7 @@ export function createEntrySource<TRaw, TField extends string>(
         const requestedGeneration = generation;
         const raw = cached;
         countAttempted.add(key);
-        countInFlight.add(key);
+        activeCountRequests += 1;
         void dependencies.loadCount(raw, key)
             .then((count) => {
                 if (requestedGeneration !== generation || count === undefined) {
@@ -179,10 +178,7 @@ export function createEntrySource<TRaw, TField extends string>(
                 // 失败的计数在当前 generation 保持未知状态且不自动重试。
             })
             .finally(() => {
-                if (requestedGeneration !== generation) {
-                    return;
-                }
-                countInFlight.delete(key);
+                activeCountRequests -= 1;
                 startTargetCounts();
             });
     }

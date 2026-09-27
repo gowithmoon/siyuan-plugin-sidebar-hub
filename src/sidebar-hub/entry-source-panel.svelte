@@ -520,28 +520,7 @@
                         {#if nested}
                             {#snippet renderEntries(entries: EntrySourceEntry[], depth = 0)}
                                 {#each entries as entry (entry.key)}
-                                    <div class="sidebar-hub__tree-item" style={`padding-left: ${depth * 18 + 4}px`}>
-                                        {#if entry.children?.length}
-                                            <button type="button" class="sidebar-hub__tree-toggle" aria-label={isEntryCollapsed(entry.key) ? translations.expandNode : translations.collapseNode} aria-expanded={!isEntryCollapsed(entry.key)} onclick={() => toggleEntry(entry.key)}>
-                                                <svg aria-hidden="true"><use href={isEntryCollapsed(entry.key) ? "#iconRight" : "#iconDown"}></use></svg>
-                                            </button>
-                                        {:else}
-                                            <span class="sidebar-hub__tree-toggle-spacer" aria-hidden="true"></span>
-                                        {/if}
-                                        {#if entry.openable === false}
-                                            <span class="sidebar-hub__tree-label" title={entry.label}>
-                                                <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
-                                                <span class="sidebar-hub__entry-label">{entry.label}</span>
-                                                {#if entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}
-                                            </span>
-                                        {:else}
-                                            <button type="button" class="sidebar-hub__list-item sidebar-hub__tree-label" title={entry.label} onclick={(event) => openEntryFromEvent(event, entry.key)}>
-                                                <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
-                                                <span class="sidebar-hub__entry-label">{entry.label}</span>
-                                                {#if entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}
-                                            </button>
-                                        {/if}
-                                    </div>
+                                    {@render renderTreeRow({ key: entry.key, entry, depth })}
                                     {#if entry.children?.length && !isEntryCollapsed(entry.key)}
                                         {@render renderEntries(entry.children, depth + 1)}
                                     {/if}

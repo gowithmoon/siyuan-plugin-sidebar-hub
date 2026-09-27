@@ -250,6 +250,40 @@ describe("数据库导航", () => {
         expect(updates[updates.length - 1]).toEqual([9, -1]);
     });
 
+    it("失效前后的在途请求合计仍不超过四个", async () => {
+        const manyResults = Array.from({ length: 6 }, (_, index): DatabaseSearchResult => ({
+            ...results[0],
+            avID: `av-${index}`,
+            avName: `数据库 ${index}`,
+            blockID: `block-${index}`,
+            children: [],
+        }));
+        let active = 0;
+        let peak = 0;
+        const resolvers: Array<() => void> = [];
+        const count = vi.fn((_avID: string) => new Promise<number>((resolve) => {
+            active += 1;
+            peak = Math.max(peak, active);
+            resolvers.push(() => {
+                active -= 1;
+                resolve(1);
+            });
+        }));
+        const source = createDatabaseSource({ load: vi.fn().mockResolvedValue(manyResults), count, open: vi.fn() });
+        const first = await source.query({ query: "", sort });
+        source.setCountTargets(first.sections[0].entries.map((entry) => entry.key));
+        await vi.waitFor(() => expect(count).toHaveBeenCalledTimes(4));
+
+        source.invalidate();
+        await source.query({ query: "", sort });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(count).toHaveBeenCalledTimes(4);
+
+        resolvers.shift()!();
+        await vi.waitFor(() => expect(count).toHaveBeenCalledTimes(5));
+        expect(peak).toBe(4);
+    });
+
     it("空目标不启动计数，重新声明目标后才补齐", async () => {
         const count = vi.fn().mockResolvedValue(1);
         const source = createDatabaseSource({ load: vi.fn().mockResolvedValue(results), count, open: vi.fn() });
