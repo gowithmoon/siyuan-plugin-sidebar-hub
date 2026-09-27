@@ -252,9 +252,11 @@
         if (!virtualScrollContainer) {
             return;
         }
-        virtualWindow = virtualList.setViewportHeight(virtualScrollContainer.clientHeight);
-        if (virtualScrollContainer.scrollTop !== virtualWindow.scrollTop) {
-            virtualScrollContainer.scrollTop = virtualWindow.scrollTop;
+        const nextWindow = virtualList.setViewportHeight(virtualScrollContainer.clientHeight);
+        virtualWindow = nextWindow;
+        // 这里必须读取局部结果；读取 virtualWindow 会让初始化 effect 订阅并触发自身。
+        if (virtualScrollContainer.scrollTop !== nextWindow.scrollTop) {
+            virtualScrollContainer.scrollTop = nextWindow.scrollTop;
         }
     }
 

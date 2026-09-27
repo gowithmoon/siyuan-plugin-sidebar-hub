@@ -574,7 +574,8 @@
     background: var(--b3-list-hover);
 }
 
-.sidebar-hub__list-item svg {
+.sidebar-hub__list-item svg,
+.sidebar-hub__tree-label > svg {
     flex: 0 0 16px;
     width: 16px;
     height: 16px;
