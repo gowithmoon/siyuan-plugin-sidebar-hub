@@ -167,6 +167,21 @@ describe("数据库导航", () => {
         });
     });
 
+    it("创建日期排序对有效与无效属性视图 ID 使用确定顺序", async () => {
+        const source = createDatabaseSource({
+            load: vi.fn().mockResolvedValue([
+                { ...datedResults[0], avID: "20260925090000-same", avName: "Zeta" },
+                { ...datedResults[1], avID: "invalid", avName: "Beta" },
+                { ...datedResults[0], avID: "20260925090000-other", avName: "Alpha" },
+            ]),
+            open: vi.fn(),
+        });
+
+        await expect(source.query({ query: "", sort: { field: "created", direction: "asc" } })).resolves.toMatchObject({
+            sections: [{ entries: [{ label: "Beta" }, { label: "Alpha" }, { label: "Zeta" }] }],
+        });
+    });
+
     it("打开条目时把数据库块 ID 交给适配器", async () => {
         const open = vi.fn();
         const source = createDatabaseSource({ load: vi.fn().mockResolvedValue(results), open });

@@ -109,10 +109,13 @@ function aggregateDatabases(results: DatabaseSearchResult[]): DatabaseRecord[] {
 
 function compareDatabases(left: DatabaseRecord, right: DatabaseRecord, field: DatabaseSortField) {
     if (field === "created") {
-        if (left.created !== undefined && right.created !== undefined) {
-            return compareText(left.created, right.created);
+        if (left.created === undefined || right.created === undefined) {
+            if (left.created === right.created) {
+                return compareText(left.label, right.label);
+            }
+            return left.created === undefined ? -1 : 1;
         }
-        return compareText(left.label, right.label);
+        return compareText(left.created, right.created) || compareText(left.label, right.label);
     }
     if (field === "updated") {
         return right.updatedRank - left.updatedRank || compareText(left.label, right.label);
