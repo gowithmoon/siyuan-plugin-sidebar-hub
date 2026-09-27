@@ -1,6 +1,7 @@
 import { openTab, type App } from "siyuan";
 
 import { request } from "../api";
+import { loadDatabaseBatches } from "./database-pagination";
 import { openDatabaseWithFallback, type DatabaseSearchResult } from "./databases";
 
 interface SearchAttributeViewResponse {
@@ -23,18 +24,20 @@ interface ApiDatabaseSearchResult {
 }
 
 export async function loadDatabases(): Promise<DatabaseSearchResult[]> {
-    const response = await request<SearchAttributeViewResponse>("/api/av/searchAttributeView", {
-        keyword: "",
-        excludes: [],
-        includeViewMatches: true,
-    });
-    if (!response.ok) {
-        throw new Error(response.raw.msg || "Unable to load databases");
-    }
+    return loadDatabaseBatches(async (excludes) => {
+        const response = await request<SearchAttributeViewResponse>("/api/av/searchAttributeView", {
+            keyword: "",
+            excludes,
+            includeViewMatches: true,
+        });
+        if (!response.ok) {
+            throw new Error(response.raw.msg || "Unable to load databases");
+        }
 
-    return (response.data?.results ?? []).flatMap((result) => {
-        const normalized = normalizeResult(result);
-        return normalized ? [normalized] : [];
+        return (response.data?.results ?? []).flatMap((result) => {
+            const normalized = normalizeResult(result);
+            return normalized ? [normalized] : [];
+        });
     });
 }
 
