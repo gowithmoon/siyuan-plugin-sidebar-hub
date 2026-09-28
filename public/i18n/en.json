@@ -15,7 +15,6 @@
         "noPreviousDailyNote": "There are no earlier daily notes.",
         "noNextDailyNote": "There are no later daily notes.",
         "dailyNoteExists": "Daily note exists",
-        "minimize": "Minimize",
         "createDailyNoteTitle": "Create today's daily note",
         "createDailyNoteMessage": "No daily note exists for {date}. Create it now?",
         "dailyNotebookRequired": "Choose a daily note notebook in the plugin settings first.",

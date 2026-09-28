@@ -97,7 +97,6 @@
         noPreviousDailyNote: string;
         noNextDailyNote: string;
         dailyNoteExists: string;
-        minimize: string;
         createDailyNoteTitle: string;
         createDailyNoteMessage: string;
         dailyNotebookRequired: string;
@@ -638,9 +637,6 @@
                     <svg aria-hidden="true"><use href="#iconRight"></use></svg>
                 </button>
             </div>
-            <button type="button" data-type="min" class="block__icon ariaLabel sidebar-hub__minimize" data-position="south" aria-label={translations.minimize}>
-                <svg aria-hidden="true"><use href="#iconMin"></use></svg>
-            </button>
         </div>
 
         <div class="sidebar-hub__weekdays" aria-hidden="true">

@@ -50,7 +50,6 @@ interface SidebarHubTranslations {
     noPreviousDailyNote: string;
     noNextDailyNote: string;
     dailyNoteExists: string;
-    minimize: string;
     createDailyNoteTitle: string;
     createDailyNoteMessage: string;
     dailyNotebookRequired: string;

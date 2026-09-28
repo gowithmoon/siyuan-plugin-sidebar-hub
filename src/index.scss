@@ -138,9 +138,9 @@
 
 .sidebar-hub__calendar-navigation {
     display: flex;
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 2px;
 }
 
@@ -151,10 +151,6 @@
     padding: 6px;
     border: 0;
     background: transparent;
-}
-
-.sidebar-hub__minimize {
-    flex: 0 0 28px;
 }
 
 .sidebar-hub__calendar-header .block__icon:hover,
@@ -430,7 +426,7 @@
     width: 100%;
     align-items: center;
     gap: 4px;
-    padding: 8px 4px 3px;
+    padding: 6px 4px;
     border: 0;
     color: var(--b3-theme-on-surface-light);
     background: transparent;
@@ -536,6 +532,11 @@
     margin-left: auto;
     color: var(--b3-theme-on-surface-light);
     font-variant-numeric: tabular-nums;
+}
+
+.sidebar-hub__entry-row > .sidebar-hub__entry-count,
+.sidebar-hub__section-row > .sidebar-hub__entry-count {
+    margin-right: 7px;
 }
 
 .sidebar-hub__entry-row {

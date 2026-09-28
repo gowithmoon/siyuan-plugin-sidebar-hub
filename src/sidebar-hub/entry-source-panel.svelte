@@ -416,28 +416,28 @@
     {/if}
 </div>
 
-{#snippet renderEntryButton(entry: EntrySourceEntry)}
+{#snippet renderEntryButton(entry: EntrySourceEntry, includeCount = true)}
     <button type="button" class="sidebar-hub__list-item" title={entry.label} onclick={() => openEntry(entry.key)}>
         <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
         <span class="sidebar-hub__entry-label">{entry.label}</span>
-        {#if entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}
+        {#if includeCount && entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}
     </button>
 {/snippet}
 
 {#snippet renderFlatEntry(entry: EntrySourceEntry)}
     {#if onEntryMenu}
         <div class="sidebar-hub__entry-row" role="group" aria-label={entry.label} oncontextmenu={(event) => openEntryMenuFromEvent(event, entry)}>
-            {@render renderEntryButton(entry)}
+            {@render renderEntryButton(entry, false)}
             <button
                 type="button"
-                class="block__icon ariaLabel sidebar-hub__entry-menu"
-                data-position="west"
+                class="block__icon sidebar-hub__entry-menu"
                 aria-label={`${entryMenuLabel ?? ""}：${entry.label}`}
                 aria-haspopup="menu"
                 onclick={(event) => openEntryMenuFromEvent(event, entry)}
             >
                 <svg aria-hidden="true"><use href="#iconMore"></use></svg>
             </button>
+            {#if entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}
         </div>
     {:else}
         {@render renderEntryButton(entry)}
@@ -546,16 +546,15 @@
                                 <button type="button" class="sidebar-hub__section-toggle" aria-expanded={!isSectionCollapsed(section.key)} onclick={() => toggleSection(section.key)}>
                                     <svg aria-hidden="true"><use href={isSectionCollapsed(section.key) ? "#iconRight" : "#iconDown"}></use></svg>
                                     <span class="sidebar-hub__entry-label">{section.label}</span>
-                                    {#if section.countable}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}
+                                    {#if section.countable && !onSectionMenu}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}
                                 </button>
                             {:else}
-                                <h3><span class="sidebar-hub__entry-label">{section.label}</span>{#if section.countable}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}</h3>
+                                <h3><span class="sidebar-hub__entry-label">{section.label}</span>{#if section.countable && !onSectionMenu}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}</h3>
                             {/if}
                             {#if onSectionMenu}
                                 <button
                                     type="button"
-                                    class="block__icon ariaLabel sidebar-hub__entry-menu"
-                                    data-position="west"
+                                    class="block__icon sidebar-hub__entry-menu"
                                     aria-label={`${sectionMenuLabel ?? ""}：${section.label}`}
                                     aria-haspopup="menu"
                                     onclick={(event) => openSectionMenuFromEvent(event, section)}
@@ -563,6 +562,7 @@
                                     <svg aria-hidden="true"><use href="#iconMore"></use></svg>
                                 </button>
                             {/if}
+                            {#if onSectionMenu && section.countable}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}
                         </div>
                     {/if}
                     {#if !isSectionCollapsed(section.key)}

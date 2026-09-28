@@ -15,7 +15,6 @@
         "noPreviousDailyNote": "没有更早的已有日记。",
         "noNextDailyNote": "没有更晚的已有日记。",
         "dailyNoteExists": "已有日记",
-        "minimize": "最小化",
         "createDailyNoteTitle": "创建今日日记",
         "createDailyNoteMessage": "尚未找到 {date} 的日记，是否创建？",
         "dailyNotebookRequired": "请先在插件设置中选择日记笔记本。",
