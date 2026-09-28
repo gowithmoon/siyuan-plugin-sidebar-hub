@@ -1,7 +1,7 @@
 <script lang="ts">
     import { Menu, showMessage, type App } from "siyuan";
 
-    import type { EntrySourceEntry, EntrySourceSort } from "./entry-source";
+    import type { EntrySourceEntry, EntrySourceSection, EntrySourceSort } from "./entry-source";
     import type { EntryMenuPosition } from "./entry-menu-event";
     import {
         TAB_DEFINITIONS,
@@ -18,9 +18,13 @@
         loadBookmarkGroups,
         openBookmark,
         openBookmarkBlockAttributes,
+        removeBookmark,
+        renameBookmark,
+        requestBookmarkRename,
         setBlockBookmarks,
     } from "./bookmark-siyuan";
     import { createBookmarkMenuActions } from "./bookmark-menu";
+    import { createBookmarkGroupMenuActions } from "./bookmark-group-menu";
     import { createBookmarkDropHandlers } from "./bookmark-drop";
     import { createTagSource } from "./tags";
     import { loadTags, openTag } from "./tag-siyuan";
@@ -211,6 +215,19 @@
         onChanged: () => bookmarkPanel.invalidate(),
         reportError: (error) => showMessage(error instanceof Error && error.message ? error.message : translations.bookmarks.loadError, 6000, "error"),
     });
+    const bookmarkGroupMenuActions = createBookmarkGroupMenuActions({
+        isReadOnly: () => window.siyuan.config.readonly,
+        labels: {
+            rename: window.siyuan.languages.rename,
+            remove: window.siyuan.languages.remove,
+        },
+        requestRename: requestBookmarkRename,
+        renameBookmark,
+        confirmRemove: confirmBookmarkRemoval,
+        removeBookmark,
+        onChanged: () => bookmarkPanel.invalidate(),
+        reportError: (error) => showMessage(error instanceof Error && error.message ? error.message : translations.bookmarks.loadError, 6000, "error"),
+    });
     let monthRequest = 0;
     let calendar = $derived(buildCalendarMonth(visibleYear, visibleMonth, today));
     let pickerYears = $derived(Array.from({ length: 16 }, (_, index) => yearPageEnd - 15 + index));
@@ -280,6 +297,23 @@
             return;
         }
         for (const action of bookmarkMenuActions.forEntry(entry)) {
+            menu.addItem({
+                id: action.id,
+                label: action.label,
+                icon: action.icon,
+                warning: action.warning,
+                click: () => void action.execute(),
+            });
+        }
+        menu.open(position);
+    }
+
+    function openBookmarkGroupMenu(section: EntrySourceSection, position: EntryMenuPosition) {
+        const menu = new Menu(`sidebar-hub-bookmark-group-${section.key}`);
+        if (menu.isOpen) {
+            return;
+        }
+        for (const action of bookmarkGroupMenuActions.forGroup(section)) {
             menu.addItem({
                 id: action.id,
                 label: action.label,
@@ -679,6 +713,8 @@
                 onSortChange={(sort) => persistSort("bookmarks", sort)}
                 entryMenuLabel={window.siyuan.languages.more}
                 onEntryMenu={openBookmarkMenu}
+                sectionMenuLabel={window.siyuan.languages.more}
+                onSectionMenu={openBookmarkGroupMenu}
                 dropHandlers={bookmarkDropHandlers}
             />
         </div>

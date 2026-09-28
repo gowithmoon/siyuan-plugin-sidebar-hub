@@ -6,9 +6,15 @@
     import type {
         EntrySource,
         EntrySourceEntry,
+        EntrySourceSection,
         EntrySourceSort,
     } from "./entry-source";
-    import { routeEntryMenuEvent, type OpenEntryMenu } from "./entry-menu-event";
+    import {
+        routeEntryMenuEvent,
+        routeSectionMenuEvent,
+        type OpenEntryMenu,
+        type OpenSectionMenu,
+    } from "./entry-menu-event";
     import {
         createFixedVirtualList,
         type FixedVirtualListWindow,
@@ -51,6 +57,8 @@
         onCollapsedKeysChange?: (keys: string[]) => void;
         entryMenuLabel?: string;
         onEntryMenu?: OpenEntryMenu;
+        sectionMenuLabel?: string;
+        onSectionMenu?: OpenSectionMenu;
         virtualized?: boolean;
         dropHandlers?: EntryDropHandlers;
     }
@@ -70,6 +78,8 @@
         onCollapsedKeysChange,
         entryMenuLabel,
         onEntryMenu,
+        sectionMenuLabel,
+        onSectionMenu,
         virtualized = false,
         dropHandlers,
     }: Props = $props();
@@ -351,6 +361,12 @@
         }
     }
 
+    function openSectionMenuFromEvent(event: MouseEvent, section: EntrySourceSection) {
+        if (onSectionMenu) {
+            routeSectionMenuEvent(event, section, onSectionMenu);
+        }
+    }
+
     async function openEntry(key: string) {
         try {
             await source.open(key);
@@ -520,15 +536,34 @@
                     use:entryDropTarget={dropHandlers ? { handlers: dropHandlers, sectionKey: section.key, enabled: active && !runtimeState.query.trim() } : undefined}
                 >
                     {#if showSectionLabels && section.label}
-                        {#if collapsible}
-                            <button type="button" class="sidebar-hub__section-toggle" aria-expanded={!isSectionCollapsed(section.key)} onclick={() => toggleSection(section.key)}>
-                                <svg aria-hidden="true"><use href={isSectionCollapsed(section.key) ? "#iconRight" : "#iconDown"}></use></svg>
-                                <span class="sidebar-hub__entry-label">{section.label}</span>
-                                {#if section.countable}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}
-                            </button>
-                        {:else}
-                            <h3><span class="sidebar-hub__entry-label">{section.label}</span>{#if section.countable}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}</h3>
-                        {/if}
+                        <div
+                            class:sidebar-hub__section-row={Boolean(onSectionMenu)}
+                            role={onSectionMenu ? "group" : undefined}
+                            aria-label={onSectionMenu ? section.label : undefined}
+                            oncontextmenu={onSectionMenu ? (event) => openSectionMenuFromEvent(event, section) : undefined}
+                        >
+                            {#if collapsible}
+                                <button type="button" class="sidebar-hub__section-toggle" aria-expanded={!isSectionCollapsed(section.key)} onclick={() => toggleSection(section.key)}>
+                                    <svg aria-hidden="true"><use href={isSectionCollapsed(section.key) ? "#iconRight" : "#iconDown"}></use></svg>
+                                    <span class="sidebar-hub__entry-label">{section.label}</span>
+                                    {#if section.countable}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}
+                                </button>
+                            {:else}
+                                <h3><span class="sidebar-hub__entry-label">{section.label}</span>{#if section.countable}<span class="sidebar-hub__entry-count">{section.count ?? "…"}</span>{/if}</h3>
+                            {/if}
+                            {#if onSectionMenu}
+                                <button
+                                    type="button"
+                                    class="block__icon ariaLabel sidebar-hub__entry-menu"
+                                    data-position="west"
+                                    aria-label={`${sectionMenuLabel ?? ""}：${section.label}`}
+                                    aria-haspopup="menu"
+                                    onclick={(event) => openSectionMenuFromEvent(event, section)}
+                                >
+                                    <svg aria-hidden="true"><use href="#iconMore"></use></svg>
+                                </button>
+                            {/if}
+                        </div>
                     {/if}
                     {#if !isSectionCollapsed(section.key)}
                         {#if nested}

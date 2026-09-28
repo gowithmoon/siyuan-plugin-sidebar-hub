@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { routeEntryMenuEvent } from "./entry-menu-event";
+import { routeEntryMenuEvent, routeSectionMenuEvent } from "./entry-menu-event";
 
 describe("条目菜单事件", () => {
     it.each([
@@ -27,5 +27,28 @@ describe("条目菜单事件", () => {
         expect(preventDefault).toHaveBeenCalledOnce();
         expect(stopPropagation).toHaveBeenCalledOnce();
         expect(open).toHaveBeenCalledWith(entry, position);
+    });
+});
+
+describe("分组菜单事件", () => {
+    it("右键分组时阻止默认行为并传递鼠标位置", () => {
+        const preventDefault = vi.fn();
+        const stopPropagation = vi.fn();
+        const open = vi.fn();
+        const section = { key: "收藏", label: "收藏", entries: [] };
+        const event = {
+            type: "contextmenu",
+            clientX: 40,
+            clientY: 60,
+            preventDefault,
+            stopPropagation,
+            currentTarget: {},
+        } as unknown as MouseEvent;
+
+        routeSectionMenuEvent(event, section, open);
+
+        expect(preventDefault).toHaveBeenCalledOnce();
+        expect(stopPropagation).toHaveBeenCalledOnce();
+        expect(open).toHaveBeenCalledWith(section, { x: 40, y: 60 });
     });
 });

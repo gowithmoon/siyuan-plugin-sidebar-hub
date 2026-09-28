@@ -442,6 +442,24 @@
     cursor: pointer;
 }
 
+.sidebar-hub__section-row {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    border-radius: var(--b3-border-radius-b);
+}
+
+.sidebar-hub__section-row:hover {
+    background: var(--b3-list-hover);
+}
+
+.sidebar-hub__section-row > .sidebar-hub__section-toggle,
+.sidebar-hub__section-row > h3 {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+}
+
 .sidebar-hub__section-toggle:hover {
     color: var(--b3-theme-on-background);
 }
@@ -552,7 +570,12 @@
 }
 
 .sidebar-hub__entry-row:hover > .sidebar-hub__entry-menu,
+.sidebar-hub__section-row:hover > .sidebar-hub__entry-menu,
 .sidebar-hub__entry-row:focus-within > .sidebar-hub__entry-menu {
+    opacity: 1;
+}
+
+.sidebar-hub__section-row:focus-within > .sidebar-hub__entry-menu {
     opacity: 1;
 }
 

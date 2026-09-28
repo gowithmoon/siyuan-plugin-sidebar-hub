@@ -1,4 +1,4 @@
-import { confirm, openAttributePanel, openTab, type App } from "siyuan";
+import { confirm, Dialog, openAttributePanel, openTab, type App } from "siyuan";
 
 import { request } from "../api";
 import type { BookmarkGroup } from "./bookmarks";
@@ -36,6 +36,67 @@ export async function setBlockBookmarks(ids: string[], bookmark: string) {
     if (!response.ok) {
         throw new Error(response.raw.msg);
     }
+}
+
+export async function renameBookmark(oldBookmark: string, newBookmark: string) {
+    const response = await request<null>("/api/bookmark/renameBookmark", {
+        oldBookmark,
+        newBookmark,
+    });
+    if (!response.ok) {
+        throw new Error(response.raw.msg);
+    }
+}
+
+export async function removeBookmark(bookmark: string) {
+    const response = await request<null>("/api/bookmark/removeBookmark", { bookmark });
+    if (!response.ok) {
+        throw new Error(response.raw.msg);
+    }
+}
+
+export function requestBookmarkRename(initialName: string): Promise<string | null> {
+    return new Promise((resolve) => {
+        let settled = false;
+        const settle = (value: string | null) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            resolve(value);
+        };
+        const dialog = new Dialog({
+            title: window.siyuan.languages.rename,
+            content: `<div class="b3-dialog__content">
+    <input class="b3-text-field fn__block" maxlength="512">
+</div>
+<div class="b3-dialog__action">
+    <button class="b3-button b3-button--cancel" type="button">${window.siyuan.languages.cancel}</button><div class="fn__space"></div>
+    <button class="b3-button b3-button--text" type="button">${window.siyuan.languages.confirm}</button>
+            </div>`,
+            width: "520px",
+            destroyCallback: () => settle(null),
+        });
+        const input = dialog.element.querySelector<HTMLInputElement>("input")!;
+        const [cancelButton, confirmButton] = dialog.element.querySelectorAll<HTMLButtonElement>("button");
+        input.value = initialName;
+        cancelButton.addEventListener("click", () => {
+            settle(null);
+            dialog.destroy();
+        });
+        confirmButton.addEventListener("click", () => {
+            settle(input.value);
+            dialog.destroy();
+        });
+        dialog.bindInput(input, () => {
+            settle(input.value);
+            dialog.destroy();
+        });
+        requestAnimationFrame(() => {
+            input.focus();
+            input.select();
+        });
+    });
 }
 
 export function openBookmarkBlockAttributes(attributes: Record<string, string>) {
