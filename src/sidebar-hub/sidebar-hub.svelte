@@ -12,7 +12,16 @@
     import type { SourceInvalidation } from "./source-invalidation";
     import { buildCalendarMonth, toDateKey } from "./calendar";
     import { createBookmarkSource } from "./bookmarks";
-    import { loadBookmarkGroups, openBookmark } from "./bookmark-siyuan";
+    import {
+        confirmBookmarkRemoval,
+        loadBookmarkBlockAttributes,
+        loadBookmarkGroups,
+        openBookmark,
+        openBookmarkBlockAttributes,
+        setBlockBookmarks,
+    } from "./bookmark-siyuan";
+    import { createBookmarkMenuActions } from "./bookmark-menu";
+    import { createBookmarkDropHandlers } from "./bookmark-drop";
     import { createTagSource } from "./tags";
     import { loadTags, openTag } from "./tag-siyuan";
     import { createDatabaseSource } from "./databases";
@@ -130,6 +139,14 @@
         load: loadBookmarkGroups,
         open: (blockId) => openBookmark(app, blockId),
     });
+    const bookmarkDropHandlers = createBookmarkDropHandlers({
+        isReadOnly: () => window.siyuan.config.readonly,
+        workspaceDir: () => window.siyuan.config.system.workspaceDir,
+        defaultBookmark: () => window.siyuan.languages.default,
+        setBookmarks: setBlockBookmarks,
+        onChanged: () => bookmarkPanel.invalidate(),
+        reportError: (error) => showMessage(error instanceof Error && error.message ? error.message : translations.bookmarks.loadError, 6000, "error"),
+    });
     const tagSource = createTagSource({
         load: loadTags,
         open: (label) => openTag(app, label),
@@ -179,6 +196,20 @@
                 : translations.pages.actionError;
             showMessage(message, 6000, "error");
         },
+    });
+    const bookmarkMenuActions = createBookmarkMenuActions({
+        isReadOnly: () => window.siyuan.config.readonly,
+        documentActions: pageDocumentMenuActions,
+        labels: {
+            attributes: window.siyuan.languages.attr,
+            removeBookmark: window.siyuan.languages.remove,
+        },
+        loadAttributes: loadBookmarkBlockAttributes,
+        openAttributes: openBookmarkBlockAttributes,
+        confirmRemoveBookmark: ({ title }) => confirmBookmarkRemoval(title),
+        removeBookmark: async (id) => setBlockBookmarks([id], ""),
+        onChanged: () => bookmarkPanel.invalidate(),
+        reportError: (error) => showMessage(error instanceof Error && error.message ? error.message : translations.bookmarks.loadError, 6000, "error"),
     });
     let monthRequest = 0;
     let calendar = $derived(buildCalendarMonth(visibleYear, visibleMonth, today));
@@ -238,6 +269,26 @@
         if (!pageSource.applyChange(change)) {
             await pagePanel.invalidate();
         }
+        if (change.kind === "rename" || change.kind === "remove") {
+            await bookmarkPanel.invalidate();
+        }
+    }
+
+    function openBookmarkMenu(entry: EntrySourceEntry, position: EntryMenuPosition) {
+        const menu = new Menu(`sidebar-hub-bookmark-${entry.key}`);
+        if (menu.isOpen) {
+            return;
+        }
+        for (const action of bookmarkMenuActions.forEntry(entry)) {
+            menu.addItem({
+                id: action.id,
+                label: action.label,
+                icon: action.icon,
+                warning: action.warning,
+                click: () => void action.execute(),
+            });
+        }
+        menu.open(position);
     }
 
     function persistSort(tabId: SidebarTabId, sort: EntrySourceSort<string>) {
@@ -626,6 +677,9 @@
                 active={preferences.activeTab === "bookmarks"}
                 initialSort={preferences.sorts.bookmarks}
                 onSortChange={(sort) => persistSort("bookmarks", sort)}
+                entryMenuLabel={window.siyuan.languages.more}
+                onEntryMenu={openBookmarkMenu}
+                dropHandlers={bookmarkDropHandlers}
             />
         </div>
         <div

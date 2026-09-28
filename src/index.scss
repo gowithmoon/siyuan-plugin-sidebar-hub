@@ -413,6 +413,18 @@
     text-align: left;
 }
 
+.sidebar-hub__entry-section.sidebar-hub__drop-target {
+    outline: 1px solid var(--b3-theme-primary);
+    outline-offset: -1px;
+    background: color-mix(in srgb, var(--b3-theme-primary) 8%, transparent);
+}
+
+.sidebar-hub__state.sidebar-hub__drop-target {
+    outline: 1px solid var(--b3-theme-primary);
+    outline-offset: -1px;
+    background: color-mix(in srgb, var(--b3-theme-primary) 8%, transparent);
+}
+
 .sidebar-hub__section-toggle {
     display: flex;
     width: 100%;

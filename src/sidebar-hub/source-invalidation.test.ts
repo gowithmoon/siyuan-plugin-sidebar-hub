@@ -47,7 +47,7 @@ describe("思源事件触发的来源失效", () => {
             cmd: "rename",
             data: { id: "doc-id", title: "新标题" },
         })).toEqual({
-            tabs: ["pages"],
+            tabs: ["bookmarks", "pages"],
             pageChange: { kind: "rename", id: "doc-id", title: "新标题" },
         });
         expect(sourceInvalidationForEvent("ws-main", { cmd: "savedoc" })).toEqual({

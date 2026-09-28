@@ -61,7 +61,10 @@ export function sourceInvalidationForEvent(
         );
     }
     if (detail?.cmd && PAGE_COMMANDS.has(detail.cmd)) {
-        return withPageChange({ tabs: ["pages"] }, parsePageChange(detail.cmd, detail.data));
+        return withPageChange(
+            { tabs: detail.cmd === "rename" ? ["bookmarks", "pages"] : ["pages"] },
+            parsePageChange(detail.cmd, detail.data),
+        );
     }
     return undefined;
 }

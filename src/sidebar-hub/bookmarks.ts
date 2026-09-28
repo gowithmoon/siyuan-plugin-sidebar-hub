@@ -34,6 +34,7 @@ interface BookmarkRecord {
     key: string;
     label: string;
     icon: string;
+    blockType: "document" | "block";
     created: string;
     updated: string;
 }
@@ -69,7 +70,7 @@ function buildBookmarkSections(
                 countable: true,
                 entries: visibleEntries
                     .sort((left, right) => compareRecords(left, right, input.sort.field) * direction)
-                    .map(({ key, label, icon }) => ({ key, label, icon })),
+                    .map(({ key, label, icon, blockType }) => ({ key, label, icon, blockType })),
             };
         })
         .filter((group) => group.entries.length > 0)
@@ -103,7 +104,7 @@ export function normalizeBookmarkGroups(value: unknown): BookmarkGroup[] {
                 }
                 blocks.push({
                     id: rawBlock.id,
-                    rootID: typeof rawBlock.rootID === "string" ? rawBlock.rootID : rawBlock.id,
+                    rootID: typeof rawBlock.rootID === "string" ? rawBlock.rootID : "",
                     content: typeof rawBlock.content === "string" ? rawBlock.content : "",
                     name: typeof rawBlock.name === "string" ? rawBlock.name : undefined,
                     hPath: typeof rawBlock.hPath === "string" ? rawBlock.hPath : undefined,
@@ -130,10 +131,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function toBookmarkRecord(block: BookmarkBlock): BookmarkRecord {
+    const isDocument = block.type === "d" || block.type === "NodeDocument" || block.id === block.rootID;
     return {
         key: block.id,
         label: plainText(block.content) || block.name || block.hPath || block.id,
-        icon: block.id === block.rootID ? "iconFile" : "iconBookmark",
+        icon: isDocument ? "iconFile" : "iconBookmark",
+        blockType: isDocument ? "document" : "block",
         created: block.created,
         updated: block.updated,
     };

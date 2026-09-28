@@ -14,6 +14,7 @@
         type FixedVirtualListWindow,
     } from "./fixed-virtual-list";
     import { flattenTagTree, tagTreeBranchKeys, type TagTreeRow } from "./tag-tree";
+    import { entryDropTarget, type EntryDropHandlers } from "./entry-drop-target";
 
     interface Translations {
         searchPlaceholder: string;
@@ -51,6 +52,7 @@
         entryMenuLabel?: string;
         onEntryMenu?: OpenEntryMenu;
         virtualized?: boolean;
+        dropHandlers?: EntryDropHandlers;
     }
 
     let {
@@ -69,6 +71,7 @@
         entryMenuLabel,
         onEntryMenu,
         virtualized = false,
+        dropHandlers,
     }: Props = $props();
     let runtimeState = $state<EntrySourceRuntimeState<string>>();
     const initialRuntimeOptions = untrack(() => ({ source, initialSort, onSortChange }));
@@ -465,7 +468,12 @@
         <button type="button" class="b3-button b3-button--outline" onclick={() => runtime.refresh()}>{translations.retry}</button>
     </div>
 {:else if runtimeState.snapshot.status === "ready" && runtimeState.snapshot.sections.length === 0}
-    <div class="sidebar-hub__state" role="status" aria-live="polite">
+    <div
+        class="sidebar-hub__state"
+        role="status"
+        aria-live="polite"
+        use:entryDropTarget={dropHandlers && !runtimeState.query.trim() ? { handlers: dropHandlers, sectionKey: null, enabled: active } : undefined}
+    >
         <svg aria-hidden="true"><use href={`#${emptyIcon}`}></use></svg>
         <p>{runtimeState.query.trim() ? translations.noMatches : translations.empty}</p>
     </div>
@@ -506,7 +514,11 @@
             </div>
         {:else}
             {#each runtimeState.snapshot.sections as section (section.key)}
-                <section class="sidebar-hub__entry-section" aria-label={sectionLabel ?? translations.searchPlaceholder}>
+                <section
+                    class="sidebar-hub__entry-section"
+                    aria-label={sectionLabel ?? translations.searchPlaceholder}
+                    use:entryDropTarget={dropHandlers ? { handlers: dropHandlers, sectionKey: section.key, enabled: active && !runtimeState.query.trim() } : undefined}
+                >
                     {#if showSectionLabels && section.label}
                         {#if collapsible}
                             <button type="button" class="sidebar-hub__section-toggle" aria-expanded={!isSectionCollapsed(section.key)} onclick={() => toggleSection(section.key)}>

@@ -18,6 +18,7 @@ export interface EntrySourceEntry {
     countable?: boolean;
     children?: EntrySourceEntry[];
     openable?: boolean;
+    blockType?: "document" | "block";
 }
 
 export interface EntrySourceSection {
