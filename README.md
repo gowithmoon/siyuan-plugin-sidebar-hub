@@ -25,7 +25,7 @@ The calendar uses one notebook selected in the plugin settings. That notebook mu
 
 ### Unified navigation tabs
 
-- **Bookmarks:** grouped by bookmark value, with collapsible groups and group counts. Sort by name, creation time, or modification time.
+- **Bookmarks:** grouped by bookmark value, with collapsible groups and group counts. Rename or remove groups, manage bookmarked documents and blocks from their context menus, and drag SiYuan documents, blocks, or tabs into a group to change their bookmark assignment. Sort by name, creation time, or modification time.
 - **Tags:** displayed as a collapsible tree with exact reference counts. Virtual parent tags organize descendants but do not open a search result of their own. Sort by name or reference count.
 - **Databases:** lists attribute views, shows their total record counts, and opens the database block with a document fallback. Sort by name.
 - **Pages:** scans every open notebook for regular documents, excluding daily notes and their path ancestors. Shows document reference counts and sorts by name, creation time, or modification time.
@@ -64,7 +64,7 @@ Open **Settings → Marketplace → Plugins**, search for **Sidebar Hub**, insta
 1. Enable the plugin and open its grid icon in the upper-left Dock.
 2. Open the plugin settings and select the notebook used for daily notes.
 3. Use the calendar to open daily notes, or switch among the bookmark, tag, database, and page tabs.
-4. Use each tab's toolbar to search, sort, refresh, and expand or collapse supported groups.
+4. Use each tab's toolbar to search, sort, refresh, and expand or collapse supported groups. In the bookmark tab, use an entry or group context menu to manage bookmarks, or drag SiYuan documents, blocks, and tabs into a bookmark group.
 
 On very large workspaces, the first page scan and asynchronous counts may take a little longer. A loading indicator or `…` count means the result has not been confirmed yet; it does not mean zero.
 
