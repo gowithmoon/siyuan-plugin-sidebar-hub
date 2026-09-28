@@ -40,6 +40,113 @@ describe("日记导航", () => {
         });
     });
 
+    it("缓存失效后重新扫描并发现外部创建的日记", async () => {
+        const documents: DailyNoteDocument[] = [
+            { id: "existing", path: "/existing.sy", name: "2026-09-25", subFileCount: 0 },
+        ];
+        const attributes: Record<string, Record<string, string>> = {
+            existing: { "custom-dailynote-20260925": "20260925" },
+        };
+        const navigator = createNavigator({
+            listDocuments: vi.fn(async (_notebookId: string, path: string) => path === "/" ? documents : []),
+            getBlockAttrs: vi.fn(async (ids: string[]) => Object.fromEntries(
+                ids.map((id) => [id, attributes[id] ?? {}]),
+            )),
+        });
+
+        await expect(navigator.loadMonth(2026, 8)).resolves.toMatchObject({
+            dates: { "2026-09-25": "existing" },
+        });
+
+        documents.push({ id: "external", path: "/external.sy", name: "2026-09-28", subFileCount: 0 });
+        attributes.external = { "custom-dailynote-20260928": "20260928" };
+
+        await expect(navigator.loadMonth(2026, 8)).resolves.toMatchObject({
+            dates: { "2026-09-25": "existing" },
+        });
+
+        const refreshMonth = navigator.refreshMonth;
+        await expect(refreshMonth(2026, 8)).resolves.toMatchObject({
+            dates: {
+                "2026-09-25": "existing",
+                "2026-09-28": "external",
+            },
+        });
+    });
+
+    it("缓存失效时仍在执行的旧扫描不会覆盖刷新结果", async () => {
+        let finishOldScan!: (documents: DailyNoteDocument[]) => void;
+        const oldScan = new Promise<DailyNoteDocument[]>((resolve) => {
+            finishOldScan = resolve;
+        });
+        const listDocuments = vi.fn()
+            .mockReturnValueOnce(oldScan)
+            .mockResolvedValueOnce([
+                { id: "external", path: "/external.sy", name: "2026-09-28", subFileCount: 0 },
+            ]);
+        const confirmCreate = vi.fn();
+        const createToday = vi.fn();
+        const open = vi.fn();
+        const navigator = createNavigator({
+            listDocuments,
+            getBlockAttrs: vi.fn(async (ids: string[]) => Object.fromEntries(
+                ids.map((id) => [id, { "custom-dailynote-20260928": "20260928" }]),
+            )),
+            confirmCreate,
+            createToday,
+            open,
+        });
+
+        const oldMonth = navigator.loadMonth(2026, 8);
+        await vi.waitFor(() => expect(listDocuments).toHaveBeenCalledTimes(1));
+        await expect(navigator.refreshMonth(2026, 8)).resolves.toMatchObject({
+            dates: { "2026-09-28": "external" },
+        });
+
+        finishOldScan([]);
+        await oldMonth;
+
+        await expect(navigator.openDate("2026-09-28")).resolves.toBe("opened");
+        expect(open).toHaveBeenCalledWith("external");
+        expect(confirmCreate).not.toHaveBeenCalled();
+        expect(createToday).not.toHaveBeenCalled();
+    });
+
+    it("打开日期时的旧扫描失效后改用刷新后的索引", async () => {
+        let finishOldScan!: (documents: DailyNoteDocument[]) => void;
+        const oldScan = new Promise<DailyNoteDocument[]>((resolve) => {
+            finishOldScan = resolve;
+        });
+        const listDocuments = vi.fn()
+            .mockReturnValueOnce(oldScan)
+            .mockResolvedValue([
+                { id: "external", path: "/external.sy", name: "2026-09-28", subFileCount: 0 },
+            ]);
+        const confirmCreate = vi.fn();
+        const createToday = vi.fn();
+        const open = vi.fn();
+        const navigator = createNavigator({
+            listDocuments,
+            getBlockAttrs: vi.fn(async (ids: string[]) => Object.fromEntries(
+                ids.map((id) => [id, { "custom-dailynote-20260928": "20260928" }]),
+            )),
+            confirmCreate,
+            createToday,
+            open,
+            today: () => "2026-09-28",
+        });
+
+        const opening = navigator.openDate("2026-09-28");
+        await vi.waitFor(() => expect(listDocuments).toHaveBeenCalledTimes(1));
+        await navigator.refreshMonth(2026, 8);
+        finishOldScan([]);
+
+        await expect(opening).resolves.toBe("opened");
+        expect(open).toHaveBeenCalledWith("external");
+        expect(confirmCreate).not.toHaveBeenCalled();
+        expect(createToday).not.toHaveBeenCalled();
+    });
+
     it("已有日记直接打开，不请求确认", async () => {
         const confirmCreate = vi.fn();
         const open = vi.fn();

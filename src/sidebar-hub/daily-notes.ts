@@ -52,6 +52,7 @@ interface DailyNoteDependencies extends DailyNotebookDependencies {
 
 export interface DailyNoteNavigator {
     loadMonth(year: number, month: number): Promise<DailyNoteMonth>;
+    refreshMonth(year: number, month: number): Promise<DailyNoteMonth>;
     openDate(date: string): Promise<DailyNoteOpenResult>;
     openAdjacentDate(date: string, direction: DailyNoteDirection): Promise<string>;
     invalidate(): void;
@@ -82,8 +83,9 @@ export async function loadDailyNotebookOptions(
 export function createDailyNoteNavigator(dependencies: DailyNoteDependencies): DailyNoteNavigator {
     let indexedNotebookId = "";
     let dateIndex: Record<string, string> | undefined;
+    let indexGeneration = 0;
 
-    return {
+    const navigator: DailyNoteNavigator = {
         async loadMonth(year, month) {
             const notebookId = await requireAvailableNotebook();
             const index = await loadIndex(notebookId);
@@ -93,6 +95,10 @@ export function createDailyNoteNavigator(dependencies: DailyNoteDependencies): D
                 month,
                 dates: Object.fromEntries(Object.entries(index).filter(([date]) => date.startsWith(monthPrefix))),
             };
+        },
+        async refreshMonth(year, month) {
+            navigator.invalidate();
+            return navigator.loadMonth(year, month);
         },
         async openDate(date) {
             const notebookId = await requireAvailableNotebook();
@@ -127,10 +133,12 @@ export function createDailyNoteNavigator(dependencies: DailyNoteDependencies): D
             return adjacent;
         },
         invalidate() {
+            indexGeneration += 1;
             indexedNotebookId = "";
             dateIndex = undefined;
         },
     };
+    return navigator;
 
     async function requireAvailableNotebook() {
         const selectedNotebookId = dependencies.selectedNotebookId();
@@ -153,8 +161,12 @@ export function createDailyNoteNavigator(dependencies: DailyNoteDependencies): D
             return dateIndex;
         }
 
+        const generation = indexGeneration;
         const nextIndex: Record<string, string> = {};
         await scanPath("/");
+        if (generation !== indexGeneration) {
+            return loadIndex(notebookId);
+        }
         indexedNotebookId = notebookId;
         dateIndex = nextIndex;
         return nextIndex;

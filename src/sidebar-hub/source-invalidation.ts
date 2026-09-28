@@ -5,11 +5,12 @@ import type { PageSourceChange } from "./pages";
 
 export interface SourceInvalidation {
     tabs: SidebarTabId[];
+    dailyNotes?: boolean;
     pageChange?: PageSourceChange;
 }
 
 const ALL_TABS = [...SIDEBAR_TAB_IDS];
-const ALL_SOURCES: SourceInvalidation = { tabs: ALL_TABS };
+const ALL_SOURCES: SourceInvalidation = { tabs: ALL_TABS, dailyNotes: true };
 const DATABASE_ACTION = /AttrView|attrView/i;
 
 const ALL_SOURCE_COMMANDS = new Set([
@@ -59,6 +60,9 @@ export function sourceInvalidationForEvent(
             { tabs: ["bookmarks", "tags", "databases", "pages"] },
             parsePageChange(detail.cmd, detail.data),
         );
+    }
+    if (detail?.cmd === "createdailynote") {
+        return { tabs: ["pages"], dailyNotes: true };
     }
     if (detail?.cmd && PAGE_COMMANDS.has(detail.cmd)) {
         return withPageChange(

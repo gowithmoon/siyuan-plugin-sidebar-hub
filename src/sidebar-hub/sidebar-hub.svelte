@@ -273,12 +273,16 @@
             databases: databasePanel,
             pages: pagePanel,
         };
-        await Promise.all(invalidation.tabs.map((tabId) => {
+        const refreshes = invalidation.tabs.map((tabId) => {
             if (tabId === "pages" && invalidation.pageChange) {
                 return applyPageChange(invalidation.pageChange);
             }
             return panels[tabId]?.invalidate();
-        }));
+        });
+        if (invalidation.dailyNotes) {
+            refreshes.push(loadCalendarMonth(visibleYear, visibleMonth, preferences.dailyNotebookId, true));
+        }
+        await Promise.all(refreshes);
     }
 
     async function applyPageChange(change: PageSourceChange) {
@@ -493,14 +497,16 @@
         selectTab(visibleTabs[nextIndex].id, true);
     }
 
-    async function loadCalendarMonth(year: number, month: number, notebookId: string) {
+    async function loadCalendarMonth(year: number, month: number, notebookId: string, refresh = false) {
         const requestId = ++monthRequest;
         if (!notebookId) {
             dailyNoteDates = {};
             return;
         }
         try {
-            const result = await dailyNoteNavigator.loadMonth(year, month);
+            const result = refresh
+                ? await dailyNoteNavigator.refreshMonth(year, month)
+                : await dailyNoteNavigator.loadMonth(year, month);
             if (requestId === monthRequest) {
                 dailyNoteDates = result.dates;
             }

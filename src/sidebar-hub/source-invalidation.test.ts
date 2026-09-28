@@ -6,9 +6,11 @@ describe("思源事件触发的来源失效", () => {
     it("笔记本打开或关闭时让全部来源与日历失效", () => {
         expect(sourceInvalidationForEvent("opened-notebook")).toEqual({
             tabs: ["bookmarks", "tags", "databases", "pages"],
+            dailyNotes: true,
         });
         expect(sourceInvalidationForEvent("closed-notebook")).toEqual({
             tabs: ["bookmarks", "tags", "databases", "pages"],
+            dailyNotes: true,
         });
     });
 
@@ -40,6 +42,13 @@ describe("思源事件触发的来源失效", () => {
     });
 
     it("文档树变化只让页面与日历失效", () => {
+        expect(sourceInvalidationForEvent("ws-main", {
+            cmd: "createdailynote",
+            data: { box: "daily", path: "/2026/09/28.sy" },
+        })).toEqual({
+            tabs: ["pages"],
+            dailyNotes: true,
+        });
         expect(sourceInvalidationForEvent("ws-main", { cmd: "refreshAttributeView" })).toEqual({
             tabs: ["databases"],
         });
@@ -90,6 +99,7 @@ describe("思源事件触发的来源失效", () => {
         })).toEqual({ tabs: ["pages"] });
         expect(sourceInvalidationForEvent("ws-main", { cmd: "mount" })).toEqual({
             tabs: ["bookmarks", "tags", "databases", "pages"],
+            dailyNotes: true,
         });
     });
 
