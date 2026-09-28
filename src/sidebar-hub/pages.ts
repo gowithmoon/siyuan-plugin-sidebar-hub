@@ -11,6 +11,7 @@ export const PAGE_SORT_FIELDS: readonly PageSortField[] = ["name", "created", "u
 
 const PAGE_SCAN_PROGRESS_INTERVAL_MS = 100;
 const PAGE_COUNT_BATCH_SIZE = 64;
+const PAGE_COUNT_REFRESH_DEBOUNCE_MS = 500;
 
 export interface PageNotebook {
     id: string;
@@ -28,6 +29,7 @@ export interface PageDocument {
 }
 
 export type PageSourceChange =
+    | { kind: "saved"; id: string; updated?: number }
     | { kind: "rename"; id: string; title: string }
     | { kind: "remove"; ids: string[] }
     | {
@@ -40,6 +42,7 @@ export type PageSourceChange =
 
 export interface PageSource extends EntrySource<PageSortField> {
     applyChange: (change: PageSourceChange) => boolean;
+    dispose: () => void;
 }
 
 interface PageDependencies {
@@ -75,6 +78,9 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
     let countTargets = new Set<string>();
     let countAttempted = new Set<string>();
     let countRequestActive = false;
+    let countGeneration = 0;
+    let countRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+    let disposed = false;
     let currentInput: EntrySourceQuery<PageSortField> | undefined;
     let currentUpdate: ((snapshot: EntrySourceSnapshot) => void) | undefined;
     let hasSuccessfulSnapshot = false;
@@ -197,6 +203,24 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             return dependencies.open(key);
         },
         applyChange(change) {
+            if (disposed) {
+                return true;
+            }
+            if (change.kind === "saved") {
+                const record = cached?.find((candidate) => candidate.id === change.id);
+                if (record && change.updated !== undefined && record.updated !== change.updated) {
+                    record.updated = change.updated;
+                    if (currentInput?.sort.field === "updated") {
+                        const nextSections = buildPageSections(cached!, currentInput, countCache);
+                        if (!sameEntryOrder(snapshot.sections, nextSections)) {
+                            publishCachedSnapshot(nextSections);
+                        }
+                    }
+                }
+                scheduleCountRefresh();
+                return true;
+            }
+
             if (!cached) {
                 return true;
             }
@@ -270,6 +294,9 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
         },
         invalidate() {
             generation += 1;
+            countGeneration += 1;
+            clearTimeout(countRefreshTimer);
+            countRefreshTimer = undefined;
             queryVersion += 1;
             cached = undefined;
             knownDocuments = new Map();
@@ -279,20 +306,27 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             countAttempted = new Set();
             snapshot = { status: "idle", sections: hasSuccessfulSnapshot ? snapshot.sections : [] };
         },
+        dispose() {
+            disposed = true;
+            generation += 1;
+            countGeneration += 1;
+            clearTimeout(countRefreshTimer);
+            countRefreshTimer = undefined;
+        },
         setCountTargets(keys) {
             countTargets = new Set(keys);
             startTargetCounts();
         },
     };
 
-    function publishCachedSnapshot() {
+    function publishCachedSnapshot(nextSections?: EntrySourceSection[]) {
         if (!cached || !currentInput) {
             return;
         }
         snapshot = {
             ...snapshot,
             status: "ready",
-            sections: buildPageSections(cached, currentInput, countCache),
+            sections: nextSections ?? buildPageSections(cached, currentInput, countCache),
             progress: undefined,
             error: undefined,
         };
@@ -305,7 +339,7 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
     }
 
     function startTargetCounts() {
-        if (!dependencies.getDocRefCounts || !cached || countRequestActive) {
+        if (disposed || countRefreshTimer !== undefined || !dependencies.getDocRefCounts || !cached || countRequestActive) {
             return;
         }
 
@@ -325,16 +359,16 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
         }
 
         countRequestActive = true;
-        void loadCountBatch(batch, generation);
+        void loadCountBatch(batch, generation, countGeneration);
     }
 
-    async function loadCountBatch(ids: string[], requestedGeneration: number) {
-        if (!dependencies.getDocRefCounts) {
+    async function loadCountBatch(ids: string[], requestedGeneration: number, requestedCountGeneration: number) {
+        if (disposed || !dependencies.getDocRefCounts) {
             return;
         }
         try {
             const counts = await dependencies.getDocRefCounts(ids);
-            if (requestedGeneration !== generation) {
+            if (disposed || requestedGeneration !== generation || requestedCountGeneration !== countGeneration) {
                 return;
             }
             for (const id of ids) {
@@ -356,6 +390,29 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             startTargetCounts();
         }
     }
+
+    function scheduleCountRefresh() {
+        if (disposed || !dependencies.getDocRefCounts || !cached) {
+            return;
+        }
+        clearTimeout(countRefreshTimer);
+        countRefreshTimer = setTimeout(() => {
+            countRefreshTimer = undefined;
+            countGeneration += 1;
+            countCache = new Map();
+            countAttempted = new Set();
+            if (cached && currentInput && snapshot.status === "ready" && countTargets.size > 0) {
+                publishCachedSnapshot();
+            }
+            startTargetCounts();
+        }, PAGE_COUNT_REFRESH_DEBOUNCE_MS);
+    }
+}
+
+function sameEntryOrder(left: EntrySourceSection[], right: EntrySourceSection[]) {
+    const leftKeys = left.flatMap((section) => section.entries.map((entry) => entry.key));
+    const rightKeys = right.flatMap((section) => section.entries.map((entry) => entry.key));
+    return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index]);
 }
 
 function documentIdFromPath(path: string) {

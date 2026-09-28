@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onDestroy } from "svelte";
     import { Menu, showMessage, type App } from "siyuan";
 
     import type { EntrySourceEntry, EntrySourceSection, EntrySourceSort } from "./entry-source";
@@ -166,6 +167,7 @@
         getDocRefCounts: loadPageDocRefCounts,
         open: (documentId) => openPage(app, documentId),
     });
+    onDestroy(() => pageSource.dispose());
     let preferences = $state<SidebarHubPreferences>();
     let visibleYear = $state(today.getFullYear());
     let visibleMonth = $state(today.getMonth());

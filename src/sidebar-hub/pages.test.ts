@@ -150,6 +150,94 @@ describe("普通页面来源", () => {
         await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledTimes(2));
     });
 
+    it("连续保存只在静默期后刷新一次当前页面引用数量", async () => {
+        vi.useFakeTimers();
+        try {
+            const listDocuments = vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []);
+            const getDocRefCounts = vi.fn().mockResolvedValue({ reading: 8 });
+            const source = createPageSource({
+                listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(2)),
+                listDocuments,
+                getBlockAttrs: vi.fn(async () => ({})),
+                getDocRefCounts,
+                open: vi.fn(),
+            });
+
+            await source.query({ query: "", sort });
+            source.setCountTargets(["reading"]);
+            await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledOnce());
+            getDocRefCounts.mockClear();
+            const scans = listDocuments.mock.calls.length;
+
+            expect(source.applyChange({ kind: "saved", id: "reading", updated: 50 })).toBe(true);
+            vi.advanceTimersByTime(200);
+            expect(source.applyChange({ kind: "saved", id: "reading", updated: 51 })).toBe(true);
+            vi.advanceTimersByTime(200);
+            expect(source.applyChange({ kind: "saved", id: "reading", updated: 52 })).toBe(true);
+            vi.advanceTimersByTime(100);
+            expect(source.applyChange({ kind: "saved", id: "reading", updated: 53 })).toBe(true);
+            source.setCountTargets(["journal-other"]);
+            await vi.advanceTimersByTimeAsync(499);
+            expect(getDocRefCounts).not.toHaveBeenCalled();
+            expect(listDocuments).toHaveBeenCalledTimes(scans);
+
+            await vi.advanceTimersByTimeAsync(1);
+            await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledOnce());
+            expect(getDocRefCounts).toHaveBeenCalledWith(["journal-other"]);
+            expect(listDocuments).toHaveBeenCalledTimes(scans);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("未缓存页面的保存事件不触发全量扫描", async () => {
+        const listDocuments = vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []);
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(2)),
+            listDocuments,
+            getBlockAttrs: vi.fn(async () => ({})),
+            open: vi.fn(),
+        });
+
+        expect(source.applyChange({ kind: "saved", id: "reading", updated: 52 })).toBe(true);
+        await source.query({ query: "", sort });
+        expect(listDocuments).toHaveBeenCalledTimes(1);
+    });
+
+    it("按修改时间排序时保存只在顺序变化后发布快照", async () => {
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(2)),
+            listDocuments: vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []),
+            getBlockAttrs: vi.fn(async () => ({})),
+            open: vi.fn(),
+        });
+        const updates: string[][] = [];
+        await source.query({ query: "", sort: { field: "updated", direction: "asc" } }, (next) => {
+            updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.key)));
+        });
+        updates.length = 0;
+
+        expect(source.applyChange({ kind: "saved", id: "reading", updated: 41 })).toBe(true);
+        expect(updates).toEqual([]);
+        expect(source.applyChange({ kind: "saved", id: "reading", updated: 10 })).toBe(true);
+        expect(updates).toEqual([["reading", "journal-other"]]);
+    });
+
+    it("按名称排序时保存不发布条目顺序未变化的快照", async () => {
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(2)),
+            listDocuments: vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []),
+            getBlockAttrs: vi.fn(async () => ({})),
+            open: vi.fn(),
+        });
+        const updates: unknown[] = [];
+        await source.query({ query: "", sort }, (next) => updates.push(next));
+        updates.length = 0;
+
+        expect(source.applyChange({ kind: "saved", id: "reading", updated: 99 })).toBe(true);
+        expect(updates).toEqual([]);
+    });
+
     it("旧 generation 的在途计数不能写回刷新后的快照", async () => {
         const resolvers: Array<(counts: Record<string, number>) => void> = [];
         const getDocRefCounts = vi.fn(() => new Promise<Record<string, number>>((resolve) => {
