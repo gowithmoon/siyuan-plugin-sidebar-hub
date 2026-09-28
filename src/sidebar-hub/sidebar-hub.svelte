@@ -280,7 +280,19 @@
             return panels[tabId]?.invalidate();
         });
         if (invalidation.dailyNotes) {
-            refreshes.push(loadCalendarMonth(visibleYear, visibleMonth, preferences.dailyNotebookId, true));
+            const removedIds = invalidation.pageChange?.kind === "remove"
+                ? invalidation.pageChange.ids
+                : [];
+            if (removedIds.length > 0) {
+                const removedDates = new Set(dailyNoteNavigator.removeDocuments(removedIds));
+                if (removedDates.size > 0) {
+                    dailyNoteDates = Object.fromEntries(
+                        Object.entries(dailyNoteDates).filter(([date]) => !removedDates.has(date)),
+                    );
+                }
+            } else {
+                refreshes.push(loadCalendarMonth(visibleYear, visibleMonth, preferences.dailyNotebookId, true));
+            }
         }
         await Promise.all(refreshes);
     }

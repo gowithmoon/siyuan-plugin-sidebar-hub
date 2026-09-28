@@ -95,11 +95,56 @@ describe("日记导航", () => {
         await navigator.loadMonth(2026, 8);
         documents.length = 0;
         delete attributes.deleted;
-        navigator.invalidate();
+        expect(navigator.removeDocuments(["deleted"])).toEqual(["2026-09-25"]);
 
         await expect(navigator.openDate("2026-09-25")).resolves.toBe("cancelled");
         expect(open).not.toHaveBeenCalled();
         expect(confirmCreate).toHaveBeenCalledWith("2026-09-25");
+    });
+
+    it("打开已有日记失败后刷新索引并重试打开", async () => {
+        const open = vi.fn()
+            .mockRejectedValueOnce(new Error("块暂时不可用"))
+            .mockResolvedValue(undefined);
+        const confirmCreate = vi.fn();
+        const navigator = createNavigator({ open, confirmCreate });
+
+        await expect(navigator.openDate("2026-09-25")).resolves.toBe("opened");
+        expect(open).toHaveBeenNthCalledWith(1, "existing");
+        expect(open).toHaveBeenNthCalledWith(2, "existing");
+        expect(confirmCreate).not.toHaveBeenCalled();
+    });
+
+    it("打开今日旧日记失败且刷新后已不存在时进入创建流程", async () => {
+        const documents: DailyNoteDocument[] = [
+            { id: "deleted", path: "/deleted.sy", name: "2026-09-25", subFileCount: 0 },
+        ];
+        const attributes: Record<string, Record<string, string>> = {
+            deleted: { "custom-dailynote-20260925": "20260925" },
+        };
+        const open = vi.fn()
+            .mockImplementationOnce(() => {
+                documents.length = 0;
+                delete attributes.deleted;
+                return Promise.reject(new Error("找不到块"));
+            })
+            .mockResolvedValue(undefined);
+        const createToday = vi.fn().mockResolvedValue("created");
+        const confirmCreate = vi.fn().mockResolvedValue(true);
+        const navigator = createNavigator({
+            listDocuments: vi.fn(async (_notebookId: string, path: string) => path === "/" ? documents : []),
+            getBlockAttrs: vi.fn(async (ids: string[]) => Object.fromEntries(
+                ids.map((id) => [id, attributes[id] ?? {}]),
+            )),
+            open,
+            createToday,
+            confirmCreate,
+        });
+
+        await expect(navigator.openDate("2026-09-25")).resolves.toBe("created");
+        expect(confirmCreate).toHaveBeenCalledWith("2026-09-25");
+        expect(createToday).toHaveBeenCalledWith("daily");
+        expect(open).toHaveBeenNthCalledWith(2, "created");
     });
 
     it("缓存失效时仍在执行的旧扫描不会覆盖刷新结果", async () => {

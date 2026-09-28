@@ -55,6 +55,7 @@ export interface DailyNoteNavigator {
     refreshMonth(year: number, month: number): Promise<DailyNoteMonth>;
     openDate(date: string): Promise<DailyNoteOpenResult>;
     openAdjacentDate(date: string, direction: DailyNoteDirection): Promise<string>;
+    removeDocuments(documentIds: string[]): string[];
     invalidate(): void;
 }
 
@@ -105,8 +106,18 @@ export function createDailyNoteNavigator(dependencies: DailyNoteDependencies): D
             const index = await loadIndex(notebookId);
             const existing = index[date];
             if (existing) {
-                await dependencies.open(existing);
-                return "opened";
+                try {
+                    await dependencies.open(existing);
+                    return "opened";
+                } catch {
+                    navigator.invalidate();
+                    const refreshedIndex = await loadIndex(notebookId);
+                    const refreshed = refreshedIndex[date];
+                    if (refreshed) {
+                        await dependencies.open(refreshed);
+                        return "opened";
+                    }
+                }
             }
             if (date !== dependencies.today()) {
                 throw new DailyNoteNavigationError("date-creation-unsupported");
@@ -131,6 +142,22 @@ export function createDailyNoteNavigator(dependencies: DailyNoteDependencies): D
             }
             await dependencies.open(index[adjacent]);
             return adjacent;
+        },
+        removeDocuments(documentIds) {
+            indexGeneration += 1;
+            if (!dateIndex || documentIds.length === 0) {
+                return [];
+            }
+
+            const removedIds = new Set(documentIds);
+            const removedDates: string[] = [];
+            for (const [date, documentId] of Object.entries(dateIndex)) {
+                if (removedIds.has(documentId)) {
+                    delete dateIndex[date];
+                    removedDates.push(date);
+                }
+            }
+            return removedDates;
         },
         invalidate() {
             indexGeneration += 1;
