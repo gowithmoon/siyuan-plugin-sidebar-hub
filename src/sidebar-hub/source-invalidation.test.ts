@@ -67,12 +67,14 @@ describe("思源事件触发的来源失效", () => {
     it("文档删除和笔记本挂载会刷新所有可能受影响的来源", () => {
         expect(sourceInvalidationForEvent("ws-main", { cmd: "removeDoc" })).toEqual({
             tabs: ["bookmarks", "tags", "databases", "pages"],
+            dailyNotes: true,
         });
         expect(sourceInvalidationForEvent("ws-main", {
             cmd: "removeDoc",
             data: { ids: ["doc-id"] },
         })).toEqual({
             tabs: ["bookmarks", "tags", "databases", "pages"],
+            dailyNotes: true,
             pageChange: { kind: "remove", ids: ["doc-id"] },
         });
         expect(sourceInvalidationForEvent("ws-main", {

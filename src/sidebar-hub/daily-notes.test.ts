@@ -74,6 +74,34 @@ describe("日记导航", () => {
         });
     });
 
+    it("日记被删除并失效后不会继续打开已删除的块", async () => {
+        const documents: DailyNoteDocument[] = [
+            { id: "deleted", path: "/deleted.sy", name: "2026-09-25", subFileCount: 0 },
+        ];
+        const attributes: Record<string, Record<string, string>> = {
+            deleted: { "custom-dailynote-20260925": "20260925" },
+        };
+        const confirmCreate = vi.fn().mockResolvedValue(false);
+        const open = vi.fn();
+        const navigator = createNavigator({
+            listDocuments: vi.fn(async (_notebookId: string, path: string) => path === "/" ? documents : []),
+            getBlockAttrs: vi.fn(async (ids: string[]) => Object.fromEntries(
+                ids.map((id) => [id, attributes[id] ?? {}]),
+            )),
+            confirmCreate,
+            open,
+        });
+
+        await navigator.loadMonth(2026, 8);
+        documents.length = 0;
+        delete attributes.deleted;
+        navigator.invalidate();
+
+        await expect(navigator.openDate("2026-09-25")).resolves.toBe("cancelled");
+        expect(open).not.toHaveBeenCalled();
+        expect(confirmCreate).toHaveBeenCalledWith("2026-09-25");
+    });
+
     it("缓存失效时仍在执行的旧扫描不会覆盖刷新结果", async () => {
         let finishOldScan!: (documents: DailyNoteDocument[]) => void;
         const oldScan = new Promise<DailyNoteDocument[]>((resolve) => {

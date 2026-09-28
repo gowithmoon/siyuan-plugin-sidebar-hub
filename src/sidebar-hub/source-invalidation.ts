@@ -57,7 +57,7 @@ export function sourceInvalidationForEvent(
     }
     if (detail?.cmd && DOCUMENT_REMOVAL_COMMANDS.has(detail.cmd)) {
         return withPageChange(
-            { tabs: ["bookmarks", "tags", "databases", "pages"] },
+            { tabs: ["bookmarks", "tags", "databases", "pages"], dailyNotes: true },
             parsePageChange(detail.cmd, detail.data),
         );
     }
