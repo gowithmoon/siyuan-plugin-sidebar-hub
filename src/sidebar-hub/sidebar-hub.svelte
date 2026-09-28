@@ -730,6 +730,7 @@
                 sectionMenuLabel={window.siyuan.languages.more}
                 onSectionMenu={openBookmarkGroupMenu}
                 dropHandlers={bookmarkDropHandlers}
+                dragKind="block"
             />
         </div>
         <div
@@ -796,6 +797,7 @@
                 onSortChange={(sort) => persistSort("pages", sort)}
                 entryMenuLabel={window.siyuan.languages.more}
                 onEntryMenu={openPageDocumentMenu}
+                dragKind="document"
             />
         </div>
     </div>

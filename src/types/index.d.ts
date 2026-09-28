@@ -98,6 +98,8 @@ interface Window {
         blockPanels: any;
         storage: any;
         user: any;
+        dragTitle: string;
+        dragElement?: HTMLElement;
         ws: any;
         languages: any;
         emojis: any;

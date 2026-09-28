@@ -19,6 +19,7 @@
         createFixedVirtualList,
         type FixedVirtualListWindow,
     } from "./fixed-virtual-list";
+    import { finishEntryDrag, startEntryDrag, type EntryDragKind } from "./entry-drag";
     import { flattenTagTree, tagTreeBranchKeys, type TagTreeRow } from "./tag-tree";
     import { entryDropTarget, type EntryDropHandlers } from "./entry-drop-target";
 
@@ -61,6 +62,7 @@
         onSectionMenu?: OpenSectionMenu;
         virtualized?: boolean;
         dropHandlers?: EntryDropHandlers;
+        dragKind?: EntryDragKind;
     }
 
     let {
@@ -82,6 +84,7 @@
         onSectionMenu,
         virtualized = false,
         dropHandlers,
+        dragKind,
     }: Props = $props();
     let runtimeState = $state<EntrySourceRuntimeState<string>>();
     const initialRuntimeOptions = untrack(() => ({ source, initialSort, onSortChange }));
@@ -361,6 +364,24 @@
         }
     }
 
+    function handleEntryDragStart(event: DragEvent, entry: EntrySourceEntry) {
+        if (!dragKind) {
+            return;
+        }
+        if (!event.dataTransfer) {
+            finishEntryDrag(window.siyuan);
+            return;
+        }
+        const target = dragKind === "document"
+            ? { kind: dragKind, id: entry.key } as const
+            : { kind: dragKind, id: entry.key, workspaceDir: window.siyuan.config.system.workspaceDir } as const;
+        startEntryDrag(event.dataTransfer, target, entry.label, window.siyuan, document);
+    }
+
+    function handleEntryDragEnd() {
+        finishEntryDrag(window.siyuan);
+    }
+
     function openSectionMenuFromEvent(event: MouseEvent, section: EntrySourceSection) {
         if (onSectionMenu) {
             routeSectionMenuEvent(event, section, onSectionMenu);
@@ -417,7 +438,15 @@
 </div>
 
 {#snippet renderEntryButton(entry: EntrySourceEntry, includeCount = true)}
-    <button type="button" class="sidebar-hub__list-item" title={entry.label} onclick={() => openEntry(entry.key)}>
+    <button
+        type="button"
+        class="sidebar-hub__list-item"
+        title={entry.label}
+        draggable={Boolean(dragKind)}
+        ondragstart={(event) => handleEntryDragStart(event, entry)}
+        ondragend={handleEntryDragEnd}
+        onclick={() => openEntry(entry.key)}
+    >
         <svg aria-hidden="true"><use href={`#${entry.icon}`}></use></svg>
         <span class="sidebar-hub__entry-label">{entry.label}</span>
         {#if includeCount && entry.countable}<span class="sidebar-hub__entry-count">{entry.count ?? "…"}</span>{/if}

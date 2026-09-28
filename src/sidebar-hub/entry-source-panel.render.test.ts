@@ -46,7 +46,23 @@ function createSource(): EntrySource<string> {
     };
 }
 
-describe("条目来源面板菜单", () => {
+describe("条目来源面板", () => {
+    it("为配置了拖拽类型的条目标记可拖拽语义", () => {
+        const { body } = render(EntrySourcePanel, {
+            props: {
+                source: createSource(),
+                translations,
+                emptyIcon: "iconFile",
+                active: false,
+                initialSort: { field: "name", direction: "asc" },
+                onSortChange: vi.fn(),
+                dragKind: "block",
+            },
+        });
+
+        expect(body).toMatch(/<button[^>]*draggable="true"[^>]*>/);
+    });
+
     it("保留更多按钮的菜单语义但不显示视觉 tooltip", () => {
         const { body } = render(EntrySourcePanel, {
             props: {
