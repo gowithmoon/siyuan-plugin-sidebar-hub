@@ -4,6 +4,14 @@ import type {
     EntrySourceSection,
     EntrySourceSnapshot,
 } from "./entry-source";
+import {
+    isDailyNote,
+    scanOpenNotebookDocuments,
+    type Notebook,
+    type NotebookDocument,
+    type NotebookDocumentAdapter,
+    type ScannedNotebookDocument,
+} from "./notebook-documents";
 
 export type PageSortField = "name" | "created" | "updated";
 
@@ -13,17 +21,8 @@ const PAGE_SCAN_PROGRESS_INTERVAL_MS = 100;
 const PAGE_COUNT_BATCH_SIZE = 64;
 const PAGE_COUNT_REFRESH_DEBOUNCE_MS = 500;
 
-export interface PageNotebook {
-    id: string;
-    name: string;
-    closed: boolean;
-}
-
-export interface PageDocument {
-    id: string;
-    path: string;
-    name: string;
-    subFileCount: number;
+export type PageNotebook = Notebook;
+export interface PageDocument extends NotebookDocument {
     created: number;
     updated: number;
 }
@@ -42,13 +41,16 @@ export type PageSourceChange =
 
 export interface PageSource extends EntrySource<PageSortField> {
     applyChange: (change: PageSourceChange) => boolean;
+    setFilter: (filter: PageFilter) => void;
     dispose: () => void;
 }
 
-interface PageDependencies {
-    listNotebooks: () => Promise<PageNotebook[]>;
-    listDocuments: (notebookId: string, path: string) => Promise<PageDocument[]>;
-    getBlockAttrs: (ids: string[]) => Promise<Record<string, Record<string, string>>>;
+export interface PageFilter {
+    excludeDailyNotes: boolean;
+    notebookIds: readonly string[];
+}
+
+interface PageDependencies extends NotebookDocumentAdapter<PageDocument> {
     getDocRefCounts?: (ids: string[]) => Promise<Record<string, number>>;
     open: (documentId: string) => Promise<void> | void;
 }
@@ -56,6 +58,7 @@ interface PageDependencies {
 interface PageRecord extends PageDocument {
     notebookId: string;
     notebookName: string;
+    hidden: boolean;
 }
 
 interface KnownDocument {
@@ -84,6 +87,7 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
     let currentInput: EntrySourceQuery<PageSortField> | undefined;
     let currentUpdate: ((snapshot: EntrySourceSnapshot) => void) | undefined;
     let hasSuccessfulSnapshot = false;
+    let filter: PageFilter = { excludeDailyNotes: true, notebookIds: [] };
 
     return {
         sortFields: PAGE_SORT_FIELDS,
@@ -95,7 +99,11 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             currentInput = input;
             currentUpdate = onUpdate;
             if (cached) {
-                snapshot = { status: "ready", sections: buildPageSections(cached, input, countCache) };
+                snapshot = {
+                    status: "ready",
+                    sections: buildPageSections(cached, input, countCache, filter),
+                    totalCount: countPages(cached, filter),
+                };
                 onUpdate?.(snapshot);
                 startTargetCounts();
                 return snapshot;
@@ -130,9 +138,18 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             };
 
             try {
-                const notebooks = (await dependencies.listNotebooks()).filter((notebook) => !notebook.closed);
-                for (const notebook of notebooks) {
-                    await scanPath(notebook, "/");
+                const notebooks = await scanOpenNotebookDocuments(dependencies, (current) => {
+                    scanned = current;
+                    publishProgress();
+                });
+                for (const { notebook, documents } of notebooks) {
+                    appendPageRecords(
+                        documents,
+                        notebook,
+                        records,
+                        nextKnownDocuments,
+                        nextDailyPaths,
+                    );
                 }
 
                 if (requestVersion !== queryVersion || requestedGeneration !== generation) {
@@ -144,7 +161,8 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
                 removedDocumentIds = new Set();
                 snapshot = {
                     status: "ready",
-                    sections: buildPageSections(records, input, countCache),
+                    sections: buildPageSections(records, input, countCache, filter),
+                    totalCount: countPages(records, filter),
                     progress: { current: scanned },
                 };
                 hasSuccessfulSnapshot = true;
@@ -161,46 +179,16 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
                 }
             }
             return snapshot;
-
-            async function scanPath(notebook: PageNotebook, path: string): Promise<boolean> {
-                const documents = await dependencies.listDocuments(notebook.id, path);
-                const attributes = documents.length > 0
-                    ? await dependencies.getBlockAttrs(documents.map((document) => document.id))
-                    : {};
-                let pathContainsDailyNote = false;
-
-                for (const document of documents) {
-                    const descendantContainsDailyNote = document.subFileCount > 0
-                        ? await scanPath(notebook, document.path)
-                        : false;
-                    const isDailyNote = Object.keys(attributes[document.id] ?? {})
-                        .some((name) => name.startsWith("custom-dailynote-"));
-
-                    scanned += 1;
-                    const hidden = isDailyNote || descendantContainsDailyNote;
-                    nextKnownDocuments.set(document.id, {
-                        id: document.id,
-                        path: document.path,
-                        notebookId: notebook.id,
-                        daily: isDailyNote,
-                        hidden,
-                    });
-                    if (isDailyNote) {
-                        nextDailyPaths.add(document.path);
-                    }
-
-                    if (hidden) {
-                        pathContainsDailyNote = true;
-                    } else {
-                        records.push({ ...document, notebookId: notebook.id, notebookName: notebook.name });
-                    }
-                    publishProgress();
-                }
-                return pathContainsDailyNote;
-            }
         },
         open(key) {
             return dependencies.open(key);
+        },
+        setFilter(nextFilter) {
+            filter = {
+                excludeDailyNotes: nextFilter.excludeDailyNotes,
+                notebookIds: [...new Set(nextFilter.notebookIds.filter(Boolean))],
+            };
+            publishCachedSnapshot();
         },
         applyChange(change) {
             if (disposed) {
@@ -211,7 +199,7 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
                 if (record && change.updated !== undefined && record.updated !== change.updated) {
                     record.updated = change.updated;
                     if (currentInput?.sort.field === "updated") {
-                        const nextSections = buildPageSections(cached!, currentInput, countCache);
+                        const nextSections = buildPageSections(cached!, currentInput, countCache, filter);
                         if (!sameEntryOrder(snapshot.sections, nextSections)) {
                             publishCachedSnapshot(nextSections);
                         }
@@ -304,7 +292,11 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             removedDocumentIds = new Set();
             countCache = new Map();
             countAttempted = new Set();
-            snapshot = { status: "idle", sections: hasSuccessfulSnapshot ? snapshot.sections : [] };
+            snapshot = {
+                status: "idle",
+                sections: hasSuccessfulSnapshot ? snapshot.sections : [],
+                totalCount: hasSuccessfulSnapshot ? snapshot.totalCount : undefined,
+            };
         },
         dispose() {
             disposed = true;
@@ -326,7 +318,8 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
         snapshot = {
             ...snapshot,
             status: "ready",
-            sections: nextSections ?? buildPageSections(cached, currentInput, countCache),
+            sections: nextSections ?? buildPageSections(cached, currentInput, countCache, filter),
+            totalCount: countPages(cached, filter),
             progress: undefined,
             error: undefined,
         };
@@ -379,7 +372,8 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             if (cached && currentInput && snapshot.status === "ready") {
                 snapshot = {
                     ...snapshot,
-                    sections: buildPageSections(cached, currentInput, countCache),
+                    sections: buildPageSections(cached, currentInput, countCache, filter),
+                    totalCount: countPages(cached, filter),
                 };
                 currentUpdate?.(snapshot);
             }
@@ -409,6 +403,48 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
     }
 }
 
+function appendPageRecords(
+    documents: ScannedNotebookDocument<PageDocument>[],
+    notebook: PageNotebook,
+    records: PageRecord[],
+    knownDocuments: Map<string, KnownDocument>,
+    dailyPaths: Set<string>,
+): boolean {
+    let pathContainsDailyNote = false;
+    for (const scanned of documents) {
+        const descendantContainsDailyNote = appendPageRecords(
+            scanned.children,
+            notebook,
+            records,
+            knownDocuments,
+            dailyPaths,
+        );
+        const daily = isDailyNote(scanned.attributes);
+        const hidden = daily || descendantContainsDailyNote;
+        const document = scanned.document;
+        knownDocuments.set(document.id, {
+            id: document.id,
+            path: document.path,
+            notebookId: notebook.id,
+            daily,
+            hidden,
+        });
+        if (daily) {
+            dailyPaths.add(document.path);
+        }
+        if (hidden) {
+            pathContainsDailyNote = true;
+        }
+        records.push({
+            ...document,
+            notebookId: notebook.id,
+            notebookName: notebook.name,
+            hidden,
+        });
+    }
+    return pathContainsDailyNote;
+}
+
 function sameEntryOrder(left: EntrySourceSection[], right: EntrySourceSection[]) {
     const leftKeys = left.flatMap((section) => section.entries.map((entry) => entry.key));
     const rightKeys = right.flatMap((section) => section.entries.map((entry) => entry.key));
@@ -428,10 +464,11 @@ function buildPageSections(
     records: PageRecord[],
     input: EntrySourceQuery<PageSortField>,
     counts: ReadonlyMap<string, number>,
+    filter: PageFilter,
 ): EntrySourceSection[] {
     const keywords = input.query.toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
     const direction = input.sort.direction === "asc" ? 1 : -1;
-    const entries = records
+    const entries = filterPageRecords(records, filter)
         .filter((record) => matchesKeywords(`${record.name} ${record.notebookName}`, keywords))
         .sort((left, right) => comparePages(left, right, input.sort.field) * direction)
         .map((record) => ({
@@ -443,6 +480,16 @@ function buildPageSections(
         }));
 
     return entries.length > 0 ? [{ key: "pages", entries }] : [];
+}
+
+function countPages(records: PageRecord[], filter: PageFilter) {
+    return filterPageRecords(records, filter).length;
+}
+
+function filterPageRecords(records: PageRecord[], filter: PageFilter) {
+    return records
+        .filter((record) => !filter.excludeDailyNotes || !record.hidden)
+        .filter((record) => filter.notebookIds.length === 0 || filter.notebookIds.includes(record.notebookId));
 }
 
 function comparePages(left: PageRecord, right: PageRecord, field: PageSortField) {

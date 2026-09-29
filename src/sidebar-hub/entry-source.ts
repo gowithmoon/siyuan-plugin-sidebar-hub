@@ -41,6 +41,7 @@ export interface EntrySource<TField extends string> {
 export interface EntrySourceSnapshot {
     status: "idle" | "loading" | "ready" | "error";
     sections: EntrySourceSection[];
+    totalCount?: number;
     error?: string;
     progress?: {
         current: number;
@@ -52,6 +53,7 @@ interface EntrySourceDependencies<TRaw, TField extends string> {
     sortFields: readonly TField[];
     load: () => Promise<TRaw>;
     build: (raw: TRaw, input: EntrySourceQuery<TField>, counts: ReadonlyMap<string, number>) => EntrySourceSection[];
+    getTotalCount?: (raw: TRaw) => number;
     loadCount?: (raw: TRaw, key: string) => Promise<number | undefined>;
     countConcurrency?: number;
     open: (key: string) => Promise<void> | void;
@@ -102,14 +104,22 @@ export function createEntrySource<TRaw, TField extends string>(
             const requestVersion = ++queryVersion;
             currentInput = input;
             currentUpdate = onUpdate;
-            currentSnapshot = { status: "loading", sections: currentSnapshot.sections };
+            currentSnapshot = {
+                status: "loading",
+                sections: currentSnapshot.sections,
+                totalCount: currentSnapshot.totalCount,
+            };
             try {
                 const raw = await load();
                 const sections = dependencies.build(raw, input, countCache);
                 if (requestVersion !== queryVersion) {
                     return currentSnapshot;
                 }
-                currentSnapshot = { status: "ready", sections };
+                currentSnapshot = {
+                    status: "ready",
+                    sections,
+                    totalCount: dependencies.getTotalCount?.(raw),
+                };
                 currentUpdate?.(currentSnapshot);
                 startTargetCounts();
             } catch (error) {
@@ -119,6 +129,7 @@ export function createEntrySource<TRaw, TField extends string>(
                 currentSnapshot = {
                     status: "error",
                     sections: currentSnapshot.sections,
+                    totalCount: currentSnapshot.totalCount,
                     error: error instanceof Error && error.message ? error.message : "Unable to load entries",
                 };
             }
@@ -135,7 +146,11 @@ export function createEntrySource<TRaw, TField extends string>(
             countAttempted = new Set();
             countPublishGeneration = undefined;
             queryVersion += 1;
-            currentSnapshot = { status: "idle", sections: currentSnapshot.sections };
+            currentSnapshot = {
+                status: "idle",
+                sections: currentSnapshot.sections,
+                totalCount: currentSnapshot.totalCount,
+            };
         },
         setCountTargets(keys) {
             countTargets = new Set(keys);

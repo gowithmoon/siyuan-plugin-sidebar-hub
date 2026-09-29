@@ -37,6 +37,7 @@ describe("标签导航", () => {
         const parent = entries.find((entry) => entry.label === "父");
         expect(parent).toMatchObject({ countable: false });
         expect(parent?.children?.[0]).toMatchObject({ label: "子", count: 2, countable: true });
+        expect((await source.query(input)).totalCount).toBe(1);
     });
 
     it("生成思源原生标签搜索关键词", () => {

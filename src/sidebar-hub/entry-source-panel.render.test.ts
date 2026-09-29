@@ -16,12 +16,14 @@ const translations = {
     noMatches: "无匹配项",
     loadError: "加载失败",
     openError: "打开失败",
+    totalCount: "共 {count} 个",
     sortOptions: { name: "名称" },
 };
 
 function createSource(): EntrySource<string> {
     const snapshot = {
         status: "ready" as const,
+        totalCount: 1,
         sections: [{
             key: "group",
             label: "长名称分组",
@@ -61,6 +63,21 @@ describe("条目来源面板", () => {
         });
 
         expect(body).toMatch(/<button[^>]*draggable="true"[^>]*>/);
+    });
+
+    it("在空搜索框提示中显示导航总数", () => {
+        const { body } = render(EntrySourcePanel, {
+            props: {
+                source: createSource(),
+                translations,
+                emptyIcon: "iconFile",
+                active: false,
+                initialSort: { field: "name", direction: "asc" },
+                onSortChange: vi.fn(),
+            },
+        });
+
+        expect(body).toContain('placeholder="共 1 个"');
     });
 
     it("保留更多按钮的菜单语义但不显示视觉 tooltip", () => {

@@ -47,6 +47,7 @@ describe("条目来源契约：书签", () => {
         });
         const all = await source.query({ query: "", sort });
         expect(all.sections).toHaveLength(2);
+        expect(all.totalCount).toBe(2);
 
         await source.open(all.sections[0].entries[0].key);
         expect(open).toHaveBeenCalledWith("20260925100000-aaaaaaa");
@@ -79,7 +80,9 @@ describe("条目来源契约：标签", () => {
             status: "ready",
             sections: [{ entries: [{ label: "项目" }] }],
         });
-        expect((await source.query({ query: "", sort })).sections).toHaveLength(1);
+        const all = await source.query({ query: "", sort });
+        expect(all.sections).toHaveLength(1);
+        expect(all.totalCount).toBe(1);
 
         await source.open("项目");
         expect(open).toHaveBeenCalledWith("项目");

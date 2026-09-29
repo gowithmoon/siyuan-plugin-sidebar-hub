@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onDestroy } from "svelte";
+    import { onDestroy, onMount } from "svelte";
     import { Menu, showMessage, type App } from "siyuan";
 
     import type { EntrySourceEntry, EntrySourceSection, EntrySourceSort } from "./entry-source";
@@ -31,14 +31,11 @@
     import { loadTags, openTag } from "./tag-siyuan";
     import { createDatabaseSource } from "./databases";
     import { loadDatabaseCount, loadDatabases, openDatabase } from "./database-siyuan";
-    import { createPageSource, type PageSourceChange } from "./pages";
+    import { createPageSource, type PageNotebook, type PageSourceChange } from "./pages";
     import {
         confirmPageDocumentRemoval,
-        loadPageBlockAttrs,
         loadPageDocRefCounts,
         loadPageDocumentAttributes,
-        loadPageDocuments,
-        loadPageNotebooks,
         openPage,
         openPageDocumentAttributes,
         removePageDocument,
@@ -54,12 +51,10 @@
     import {
         confirmDailyNoteCreation,
         createTodayDailyNote,
-        loadDailyNoteBlockAttrs,
-        loadDailyNoteDocuments,
         loadDailyNotebookConfig,
-        loadDailyNotebooks,
         openDailyNote,
     } from "./daily-note-siyuan";
+    import { notebookDocumentAdapter } from "./notebook-documents-siyuan";
     import EntrySourcePanel from "./entry-source-panel.svelte";
 
     interface PanelTranslations {
@@ -74,8 +69,12 @@
         noMatches: string;
         loadError: string;
         openError: string;
+        totalCount?: string;
         progress?: string;
         sortOptions: Record<string, string>;
+        notebookFilter?: string;
+        allNotebooks?: string;
+        selectedNotebooks?: string;
         expandAll?: string;
         collapseAll?: string;
         expandNode?: string;
@@ -121,6 +120,7 @@
         onSortChange: (tabId: SidebarTabId, sort: EntrySourceSort<SidebarHubSortField>) => void;
         onBookmarkCollapsedChange: (keys: string[]) => void;
         onTagCollapsedChange: (keys: string[]) => void;
+        onPageNotebookFilterChange?: (ids: string[]) => void;
     }
 
     interface EntrySourcePanelHandle {
@@ -136,6 +136,7 @@
         onSortChange,
         onBookmarkCollapsedChange,
         onTagCollapsedChange,
+        onPageNotebookFilterChange,
     }: Props = $props();
     const today = new Date();
     const months = Array.from({ length: 12 }, (_, index) => index);
@@ -161,9 +162,7 @@
         open: (blockId) => openDatabase(app, blockId),
     });
     const pageSource = createPageSource({
-        listNotebooks: loadPageNotebooks,
-        listDocuments: loadPageDocuments,
-        getBlockAttrs: loadPageBlockAttrs,
+        ...notebookDocumentAdapter,
         getDocRefCounts: loadPageDocRefCounts,
         open: (documentId) => openPage(app, documentId),
     });
@@ -181,6 +180,14 @@
     let tagPanel: EntrySourcePanelHandle;
     let databasePanel: EntrySourcePanelHandle;
     let pagePanel: EntrySourcePanelHandle;
+    let pageNotebooks = $state<PageNotebook[]>([]);
+    onMount(() => {
+        void notebookDocumentAdapter.listNotebooks()
+            .then((notebooks) => pageNotebooks = notebooks.filter((notebook) => !notebook.closed))
+            .catch(() => {
+                pageNotebooks = [];
+            });
+    });
     const pageDocumentMenuActions = createPageDocumentMenuActions({
         isReadOnly: () => window.siyuan.config.readonly,
         labels: {
@@ -235,10 +242,8 @@
     let visibleTabs = $derived(TAB_DEFINITIONS.filter((tab) => preferences.visibleTabs[tab.id]));
     const dailyNoteNavigator = createDailyNoteNavigator({
         selectedNotebookId: () => preferences.dailyNotebookId,
-        listNotebooks: loadDailyNotebooks,
+        ...notebookDocumentAdapter,
         getNotebookConfig: loadDailyNotebookConfig,
-        listDocuments: loadDailyNoteDocuments,
-        getBlockAttrs: loadDailyNoteBlockAttrs,
         confirmCreate: (date) => confirmDailyNoteCreation(
             translations.createDailyNoteTitle,
             translations.createDailyNoteMessage.replace("{date}", date),
@@ -259,6 +264,88 @@
 
     function initializePreferences() {
         preferences = initialPreferences;
+    }
+
+    $effect(() => {
+        pageSource.setFilter({
+            excludeDailyNotes: preferences.excludeDailyNotes,
+            notebookIds: preferences.pageNotebookIds,
+        });
+    });
+
+    async function openPageNotebookFilter(event: MouseEvent) {
+        event.preventDefault();
+        event.stopPropagation();
+        const button = event.currentTarget as HTMLButtonElement;
+        pageNotebooks = (await notebookDocumentAdapter.listNotebooks()).filter((notebook) => !notebook.closed);
+        const menu = new Menu(`sidebar-hub-page-notebooks-${instanceId}`);
+        if (menu.isOpen) {
+            return;
+        }
+        let selected = new Set(preferences.pageNotebookIds);
+        const itemElements = new Map<string, HTMLElement>();
+        const allItem = menu.addItem({
+            label: translations.pages.allNotebooks,
+            checked: selected.size === 0,
+            click: (element) => {
+                selected = new Set();
+                onPageNotebookFilterChange?.([]);
+                syncNotebookMenuChecks(itemElements, selected);
+                syncNotebookMenuItem(element, true);
+                return true;
+            },
+        });
+        itemElements.set("", allItem);
+        for (const notebook of pageNotebooks) {
+            const item = menu.addItem({
+                label: notebook.name,
+                checked: selected.has(notebook.id),
+                click: (element) => {
+                    const next = new Set(selected);
+                    if (next.has(notebook.id)) {
+                        next.delete(notebook.id);
+                    } else {
+                        next.add(notebook.id);
+                    }
+                    selected = next;
+                    onPageNotebookFilterChange?.([...next]);
+                    syncNotebookMenuChecks(itemElements, selected);
+                    syncNotebookMenuItem(element, selected.has(notebook.id));
+                    return true;
+                },
+            });
+            itemElements.set(notebook.id, item);
+        }
+        const rect = button.getBoundingClientRect();
+        menu.open({ x: rect.left, y: rect.bottom, h: rect.height, w: rect.width });
+    }
+
+    function syncNotebookMenuChecks(items: Map<string, HTMLElement>, selected: Set<string>) {
+        for (const [id, item] of items) {
+            syncNotebookMenuItem(item, id === "" ? selected.size === 0 : selected.has(id));
+        }
+    }
+
+    function syncNotebookMenuItem(item: HTMLElement, checked: boolean) {
+        const existing = item.querySelector<SVGElement>(".b3-menu__checked");
+        if (checked && !existing) {
+            const check = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            check.classList.add("b3-menu__checked");
+            check.innerHTML = '<use xlink:href="#iconSelect"></use>';
+            item.append(check);
+        } else if (!checked) {
+            existing?.remove();
+        }
+    }
+
+    function pageNotebookFilterLabel() {
+        if (preferences.pageNotebookIds.length === 0) {
+            return translations.pages.notebookFilter ?? "";
+        }
+        const names = pageNotebooks
+            .filter((notebook) => preferences.pageNotebookIds.includes(notebook.id))
+            .map((notebook) => notebook.name);
+        return `${translations.pages.selectedNotebooks?.replace("{count}", String(preferences.pageNotebookIds.length)) ?? ""}${names.length > 0 ? ` (${names.join(", ")})` : ""}`;
     }
 
     export function updatePreferences(nextPreferences: SidebarHubPreferences) {
@@ -797,6 +884,11 @@
                 active={preferences.activeTab === "pages"}
                 initialSort={preferences.sorts.pages}
                 onSortChange={(sort) => persistSort("pages", sort)}
+                filterButton={{
+                    label: pageNotebookFilterLabel(),
+                    activeCount: preferences.pageNotebookIds.length,
+                    onClick: openPageNotebookFilter,
+                }}
                 entryMenuLabel={window.siyuan.languages.more}
                 onEntryMenu={openPageDocumentMenu}
                 dragKind="document"

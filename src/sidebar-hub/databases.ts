@@ -48,6 +48,7 @@ export function createDatabaseSource(dependencies: DatabaseDependencies): EntryS
         sortFields: DATABASE_SORT_FIELDS,
         load: dependencies.load,
         build: buildDatabaseSections,
+        getTotalCount: (results) => aggregateDatabases(results).length,
         loadCount: dependencies.count
             ? (results, key) => loadDatabaseCount(results, key, dependencies.count!)
             : undefined,

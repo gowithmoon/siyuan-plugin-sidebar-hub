@@ -44,6 +44,8 @@ export function createBookmarkSource(dependencies: BookmarkDependencies): EntryS
         sortFields: BOOKMARK_SORT_FIELDS,
         load: dependencies.load,
         build: buildBookmarkSections,
+        getTotalCount: (raw) => normalizeBookmarkGroups(raw)
+            .reduce((total, group) => total + group.blocks.length, 0),
         open: dependencies.open,
     });
 }

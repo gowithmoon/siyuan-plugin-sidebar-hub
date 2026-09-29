@@ -40,6 +40,16 @@ describe("日记导航", () => {
         });
     });
 
+    it("带日记前缀但日期格式无效的属性不进入日期索引", async () => {
+        const navigator = createNavigator({
+            getBlockAttrs: vi.fn(async (ids: string[]) => Object.fromEntries(
+                ids.map((id) => [id, id === "existing" ? { "custom-dailynote-invalid": "invalid" } : {}]),
+            )),
+        });
+
+        await expect(navigator.loadMonth(2026, 8)).resolves.toMatchObject({ dates: {} });
+    });
+
     it("缓存失效后重新扫描并发现外部创建的日记", async () => {
         const documents: DailyNoteDocument[] = [
             { id: "existing", path: "/existing.sy", name: "2026-09-25", subFileCount: 0 },

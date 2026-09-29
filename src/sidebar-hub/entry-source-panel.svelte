@@ -35,6 +35,7 @@
         noMatches: string;
         loadError: string;
         openError: string;
+        totalCount?: string;
         progress?: string;
         sortOptions: Record<string, string>;
         expandAll?: string;
@@ -63,6 +64,11 @@
         virtualized?: boolean;
         dropHandlers?: EntryDropHandlers;
         dragKind?: EntryDragKind;
+        filterButton?: {
+            label: string;
+            activeCount: number;
+            onClick: (event: MouseEvent) => void;
+        };
     }
 
     let {
@@ -85,6 +91,7 @@
         virtualized = false,
         dropHandlers,
         dragKind,
+        filterButton,
     }: Props = $props();
     let runtimeState = $state<EntrySourceRuntimeState<string>>();
     const initialRuntimeOptions = untrack(() => ({ source, initialSort, onSortChange }));
@@ -399,20 +406,38 @@
     function progressLabel() {
         return translations.progress?.replace("{current}", String(runtimeState.snapshot.progress?.current ?? 0));
     }
+
+    function searchPlaceholder() {
+        if (runtimeState.query.trim()) {
+            return translations.searchPlaceholder;
+        }
+        if (runtimeState.snapshot.status === "loading") {
+            return translations.loading;
+        }
+        return translations.totalCount?.replace("{count}", String(runtimeState.snapshot.totalCount ?? 0))
+            ?? translations.searchPlaceholder;
+    }
 </script>
 
-<div class:sidebar-hub__tools--collapsible={collapsible} class="sidebar-hub__tools">
+<div class:sidebar-hub__tools--collapsible={collapsible} class:sidebar-hub__tools--filter={Boolean(filterButton)} class="sidebar-hub__tools">
     <label class="sidebar-hub__search">
         <svg aria-hidden="true"><use href="#iconSearch"></use></svg>
         <input
             type="search"
             class="b3-text-field"
             value={runtimeState.query}
-            placeholder={translations.searchPlaceholder}
-            aria-label={translations.searchPlaceholder}
+            placeholder={searchPlaceholder()}
+            aria-label={searchPlaceholder()}
             oninput={changeQuery}
         />
     </label>
+    {#if filterButton}
+        <button type="button" class="block__icon block__icon--show ariaLabel sidebar-hub__filter-button" data-position="south"
+            aria-label={filterButton.label} title={filterButton.label} onclick={filterButton.onClick}>
+            <svg aria-hidden="true"><use href="#iconFilter"></use></svg>
+            {#if filterButton.activeCount > 0}<span class="sidebar-hub__filter-count" aria-hidden="true">{filterButton.activeCount}</span>{/if}
+        </button>
+    {/if}
     <button type="button" class="block__icon block__icon--show ariaLabel" data-position="south"
         aria-label={`${translations.sortLabel}：${translations.sortOptions[runtimeState.sort.field] ?? runtimeState.sort.field}`}
         aria-haspopup="menu"

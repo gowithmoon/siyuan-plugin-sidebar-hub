@@ -6,11 +6,9 @@ import type { BookmarkSortField } from "./sidebar-hub/bookmarks";
 import type { DatabaseSortField } from "./sidebar-hub/databases";
 import type { PageSortField } from "./sidebar-hub/pages";
 import type { EntrySourceSort } from "./sidebar-hub/entry-source";
-import {
-    loadDailyNotebookConfig,
-    loadDailyNotebooks,
-} from "./sidebar-hub/daily-note-siyuan";
+import { loadDailyNotebookConfig } from "./sidebar-hub/daily-note-siyuan";
 import { loadDailyNotebookOptions, type DailyNotebookOption } from "./sidebar-hub/daily-notes";
+import { notebookDocumentAdapter } from "./sidebar-hub/notebook-documents-siyuan";
 import {
     DEFAULT_PREFERENCES,
     TAB_DEFINITIONS,
@@ -59,6 +57,8 @@ interface SidebarHubTranslations {
     dailyNoteOpenError: string;
     dailyNotebook: string;
     dailyNotebookDescription: string;
+    excludeDailyNotes: string;
+    excludeDailyNotesDescription: string;
     noDailyNotebook: string;
     visibleTabsDescription: string;
     keepOneTab: string;
@@ -75,6 +75,7 @@ interface SidebarHubTranslations {
         noMatches: string;
         loadError: string;
         openError: string;
+        totalCount: string;
         groupLabel: string;
         sortOptions: Record<BookmarkSortField, string>;
         expandAll: string;
@@ -92,6 +93,7 @@ interface SidebarHubTranslations {
         noMatches: string;
         loadError: string;
         openError: string;
+        totalCount: string;
         expandAll: string;
         collapseAll: string;
         expandNode: string;
@@ -110,6 +112,7 @@ interface SidebarHubTranslations {
         noMatches: string;
         loadError: string;
         openError: string;
+        totalCount: string;
         sortOptions: Record<DatabaseSortField, string>;
     };
     pages: {
@@ -124,9 +127,13 @@ interface SidebarHubTranslations {
         noMatches: string;
         loadError: string;
         openError: string;
+        totalCount: string;
         actionError: string;
         progress: string;
         sortOptions: Record<PageSortField, string>;
+        notebookFilter: string;
+        allNotebooks: string;
+        selectedNotebooks: string;
     };
 }
 
@@ -142,16 +149,21 @@ export default class SidebarHubPlugin extends Plugin {
         this.invalidateFromEvent("opened-notebook");
     };
     private readonly handleClosedNotebook = () => {
-        this.invalidateFromEvent("closed-notebook");
+        void this.reconcilePageNotebookSelection()
+            .then(() => this.invalidateFromEvent("closed-notebook"))
+            .catch(() => this.invalidateFromEvent("closed-notebook"));
     };
 
     async onload() {
         this.preferences = normalizePreferences(await this.loadData(PREFERENCES_FILE));
+        void this.reconcilePageNotebookSelection().catch(() => {
+            // Keep the persisted selection when notebook enumeration is temporarily unavailable.
+        });
 
         const translations = this.i18n.sidebarHub as unknown as SidebarHubTranslations;
         try {
             this.dailyNotebookOptions = await loadDailyNotebookOptions({
-                listNotebooks: loadDailyNotebooks,
+                listNotebooks: notebookDocumentAdapter.listNotebooks,
                 getNotebookConfig: loadDailyNotebookConfig,
             });
         } catch {
@@ -194,6 +206,9 @@ export default class SidebarHubPlugin extends Plugin {
                         },
                         onTagCollapsedChange: (keys: string[]) => {
                             void plugin.changeTagCollapsedPaths(keys);
+                        },
+                        onPageNotebookFilterChange: (ids: string[]) => {
+                            void plugin.changePageNotebookFilter(ids);
                         },
                     },
                 }) as SidebarHubHandle;
@@ -239,6 +254,22 @@ export default class SidebarHubPlugin extends Plugin {
             title: translations.dailyNotebook,
             description: translations.dailyNotebookDescription,
             actionElement: dailyNotebookSelect,
+        });
+
+        const excludeDailyNotes = document.createElement("input");
+        excludeDailyNotes.type = "checkbox";
+        excludeDailyNotes.className = "b3-switch fn__flex-center";
+        excludeDailyNotes.checked = this.preferences.excludeDailyNotes;
+        excludeDailyNotes.addEventListener("change", () => {
+            void this.updatePreferences({
+                ...this.preferences,
+                excludeDailyNotes: excludeDailyNotes.checked,
+            });
+        });
+        this.setting.addItem({
+            title: translations.excludeDailyNotes,
+            description: translations.excludeDailyNotesDescription,
+            actionElement: excludeDailyNotes,
         });
 
         for (const tab of TAB_DEFINITIONS) {
@@ -307,6 +338,13 @@ export default class SidebarHubPlugin extends Plugin {
         });
     }
 
+    private async changePageNotebookFilter(ids: string[]) {
+        await this.updatePreferences({
+            ...this.preferences,
+            pageNotebookIds: ids,
+        });
+    }
+
     private invalidateFromEvent(
         type: "ws-main" | "opened-notebook" | "closed-notebook",
         detail?: Pick<IWebSocketData, "cmd" | "data">,
@@ -332,5 +370,14 @@ export default class SidebarHubPlugin extends Plugin {
             handle.updatePreferences(this.preferences);
         }
         await this.saveData(PREFERENCES_FILE, this.preferences);
+    }
+
+    private async reconcilePageNotebookSelection() {
+        const openNotebooks = await notebookDocumentAdapter.listNotebooks();
+        const openIds = new Set(openNotebooks.filter((notebook) => !notebook.closed).map((notebook) => notebook.id));
+        const selected = this.preferences.pageNotebookIds.filter((id) => openIds.has(id));
+        if (selected.length !== this.preferences.pageNotebookIds.length) {
+            await this.updatePreferences({ ...this.preferences, pageNotebookIds: selected });
+        }
     }
 }
