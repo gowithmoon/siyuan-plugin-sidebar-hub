@@ -6,12 +6,9 @@ import type { BookmarkSortField } from "./sidebar-hub/bookmarks";
 import type { DatabaseSortField } from "./sidebar-hub/databases";
 import type { PageSortField } from "./sidebar-hub/pages";
 import type { EntrySourceSort } from "./sidebar-hub/entry-source";
-import {
-    loadDailyNotebookConfig,
-    loadDailyNotebooks,
-} from "./sidebar-hub/daily-note-siyuan";
-import { loadPageNotebooks } from "./sidebar-hub/page-siyuan";
+import { loadDailyNotebookConfig } from "./sidebar-hub/daily-note-siyuan";
 import { loadDailyNotebookOptions, type DailyNotebookOption } from "./sidebar-hub/daily-notes";
+import { notebookDocumentAdapter } from "./sidebar-hub/notebook-documents-siyuan";
 import {
     DEFAULT_PREFERENCES,
     TAB_DEFINITIONS,
@@ -166,7 +163,7 @@ export default class SidebarHubPlugin extends Plugin {
         const translations = this.i18n.sidebarHub as unknown as SidebarHubTranslations;
         try {
             this.dailyNotebookOptions = await loadDailyNotebookOptions({
-                listNotebooks: loadDailyNotebooks,
+                listNotebooks: notebookDocumentAdapter.listNotebooks,
                 getNotebookConfig: loadDailyNotebookConfig,
             });
         } catch {
@@ -376,7 +373,7 @@ export default class SidebarHubPlugin extends Plugin {
     }
 
     private async reconcilePageNotebookSelection() {
-        const openNotebooks = await loadPageNotebooks();
+        const openNotebooks = await notebookDocumentAdapter.listNotebooks();
         const openIds = new Set(openNotebooks.filter((notebook) => !notebook.closed).map((notebook) => notebook.id));
         const selected = this.preferences.pageNotebookIds.filter((id) => openIds.has(id));
         if (selected.length !== this.preferences.pageNotebookIds.length) {

@@ -1,30 +1,6 @@
 import { confirm, Dialog, openAttributePanel, openTab, type App } from "siyuan";
 
-import { currentAppId, request } from "../api";
-import type { PageDocument, PageNotebook } from "./pages";
-
-interface ListNotebooksResponse {
-    notebooks?: Array<ApiNotebook | null> | null;
-}
-
-interface ApiNotebook {
-    id: string;
-    name: string;
-    closed: boolean;
-}
-
-interface ListDocumentsResponse {
-    files?: Array<ApiDocument | null> | null;
-}
-
-interface ApiDocument {
-    id: string;
-    path: string;
-    name: string;
-    subFileCount: number;
-    ctime: number;
-    mtime: number;
-}
+import { request } from "../api";
 
 interface ApiDocInfo {
     id: string;
@@ -33,52 +9,6 @@ interface ApiDocInfo {
 
 interface ApiDocumentAttributes {
     ial?: Record<string, string> | null;
-}
-
-export async function loadPageNotebooks(): Promise<PageNotebook[]> {
-    const response = await request<ListNotebooksResponse>("/api/notebook/lsNotebooks", {});
-    if (!response.ok) {
-        throw new Error(response.raw.msg || "Unable to load notebooks");
-    }
-    return (response.data?.notebooks ?? []).flatMap((notebook) => notebook
-        ? [{ id: notebook.id, name: notebook.name, closed: notebook.closed }]
-        : []);
-}
-
-export async function loadPageDocuments(notebookId: string, path: string): Promise<PageDocument[]> {
-    const response = await request<ListDocumentsResponse>("/api/filetree/listDocsByPath", {
-        notebook: notebookId,
-        path,
-        app: currentAppId(),
-        maxListCount: 0,
-        ignoreMaxListHint: true,
-    });
-    if (!response.ok) {
-        throw new Error(response.raw.msg || "Unable to load documents");
-    }
-    return (response.data?.files ?? []).flatMap((document) => document
-        ? [{
-            id: document.id,
-            path: document.path,
-            name: document.name,
-            subFileCount: document.subFileCount,
-            created: document.ctime,
-            updated: document.mtime,
-        }]
-        : []);
-}
-
-export async function loadPageBlockAttrs(ids: string[]): Promise<Record<string, Record<string, string>>> {
-    const response = await request<Record<string, Record<string, string> | null>>(
-        "/api/attr/batchGetBlockAttrs",
-        { ids },
-    );
-    if (!response.ok) {
-        throw new Error(response.raw.msg || "Unable to load document attributes");
-    }
-    return Object.fromEntries(
-        Object.entries(response.data ?? {}).map(([id, attrs]) => [id, attrs ?? {}]),
-    );
 }
 
 export async function loadPageDocRefCounts(ids: string[]): Promise<Record<string, number>> {

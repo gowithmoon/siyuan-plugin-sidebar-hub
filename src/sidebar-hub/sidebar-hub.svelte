@@ -34,11 +34,8 @@
     import { createPageSource, type PageNotebook, type PageSourceChange } from "./pages";
     import {
         confirmPageDocumentRemoval,
-        loadPageBlockAttrs,
         loadPageDocRefCounts,
         loadPageDocumentAttributes,
-        loadPageDocuments,
-        loadPageNotebooks,
         openPage,
         openPageDocumentAttributes,
         removePageDocument,
@@ -54,12 +51,10 @@
     import {
         confirmDailyNoteCreation,
         createTodayDailyNote,
-        loadDailyNoteBlockAttrs,
-        loadDailyNoteDocuments,
         loadDailyNotebookConfig,
-        loadDailyNotebooks,
         openDailyNote,
     } from "./daily-note-siyuan";
+    import { notebookDocumentAdapter } from "./notebook-documents-siyuan";
     import EntrySourcePanel from "./entry-source-panel.svelte";
 
     interface PanelTranslations {
@@ -167,9 +162,7 @@
         open: (blockId) => openDatabase(app, blockId),
     });
     const pageSource = createPageSource({
-        listNotebooks: loadPageNotebooks,
-        listDocuments: loadPageDocuments,
-        getBlockAttrs: loadPageBlockAttrs,
+        ...notebookDocumentAdapter,
         getDocRefCounts: loadPageDocRefCounts,
         open: (documentId) => openPage(app, documentId),
     });
@@ -189,7 +182,7 @@
     let pagePanel: EntrySourcePanelHandle;
     let pageNotebooks = $state<PageNotebook[]>([]);
     onMount(() => {
-        void loadPageNotebooks()
+        void notebookDocumentAdapter.listNotebooks()
             .then((notebooks) => pageNotebooks = notebooks.filter((notebook) => !notebook.closed))
             .catch(() => {
                 pageNotebooks = [];
@@ -249,10 +242,8 @@
     let visibleTabs = $derived(TAB_DEFINITIONS.filter((tab) => preferences.visibleTabs[tab.id]));
     const dailyNoteNavigator = createDailyNoteNavigator({
         selectedNotebookId: () => preferences.dailyNotebookId,
-        listNotebooks: loadDailyNotebooks,
+        ...notebookDocumentAdapter,
         getNotebookConfig: loadDailyNotebookConfig,
-        listDocuments: loadDailyNoteDocuments,
-        getBlockAttrs: loadDailyNoteBlockAttrs,
         confirmCreate: (date) => confirmDailyNoteCreation(
             translations.createDailyNoteTitle,
             translations.createDailyNoteMessage.replace("{date}", date),
@@ -286,7 +277,7 @@
         event.preventDefault();
         event.stopPropagation();
         const button = event.currentTarget as HTMLButtonElement;
-        pageNotebooks = (await loadPageNotebooks()).filter((notebook) => !notebook.closed);
+        pageNotebooks = (await notebookDocumentAdapter.listNotebooks()).filter((notebook) => !notebook.closed);
         const menu = new Menu(`sidebar-hub-page-notebooks-${instanceId}`);
         if (menu.isOpen) {
             return;

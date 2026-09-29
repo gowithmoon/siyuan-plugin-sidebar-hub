@@ -4,6 +4,14 @@ import type {
     EntrySourceSection,
     EntrySourceSnapshot,
 } from "./entry-source";
+import {
+    isDailyNote,
+    scanOpenNotebookDocuments,
+    type Notebook,
+    type NotebookDocument,
+    type NotebookDocumentAdapter,
+    type ScannedNotebookDocument,
+} from "./notebook-documents";
 
 export type PageSortField = "name" | "created" | "updated";
 
@@ -13,17 +21,8 @@ const PAGE_SCAN_PROGRESS_INTERVAL_MS = 100;
 const PAGE_COUNT_BATCH_SIZE = 64;
 const PAGE_COUNT_REFRESH_DEBOUNCE_MS = 500;
 
-export interface PageNotebook {
-    id: string;
-    name: string;
-    closed: boolean;
-}
-
-export interface PageDocument {
-    id: string;
-    path: string;
-    name: string;
-    subFileCount: number;
+export type PageNotebook = Notebook;
+export interface PageDocument extends NotebookDocument {
     created: number;
     updated: number;
 }
@@ -51,10 +50,7 @@ export interface PageFilter {
     notebookIds: readonly string[];
 }
 
-interface PageDependencies {
-    listNotebooks: () => Promise<PageNotebook[]>;
-    listDocuments: (notebookId: string, path: string) => Promise<PageDocument[]>;
-    getBlockAttrs: (ids: string[]) => Promise<Record<string, Record<string, string>>>;
+interface PageDependencies extends NotebookDocumentAdapter<PageDocument> {
     getDocRefCounts?: (ids: string[]) => Promise<Record<string, number>>;
     open: (documentId: string) => Promise<void> | void;
 }
@@ -142,9 +138,18 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             };
 
             try {
-                const notebooks = (await dependencies.listNotebooks()).filter((notebook) => !notebook.closed);
-                for (const notebook of notebooks) {
-                    await scanPath(notebook, "/");
+                const notebooks = await scanOpenNotebookDocuments(dependencies, (current) => {
+                    scanned = current;
+                    publishProgress();
+                });
+                for (const { notebook, documents } of notebooks) {
+                    appendPageRecords(
+                        documents,
+                        notebook,
+                        records,
+                        nextKnownDocuments,
+                        nextDailyPaths,
+                    );
                 }
 
                 if (requestVersion !== queryVersion || requestedGeneration !== generation) {
@@ -174,47 +179,6 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
                 }
             }
             return snapshot;
-
-            async function scanPath(notebook: PageNotebook, path: string): Promise<boolean> {
-                const documents = await dependencies.listDocuments(notebook.id, path);
-                const attributes = documents.length > 0
-                    ? await dependencies.getBlockAttrs(documents.map((document) => document.id))
-                    : {};
-                let pathContainsDailyNote = false;
-
-                for (const document of documents) {
-                    const descendantContainsDailyNote = document.subFileCount > 0
-                        ? await scanPath(notebook, document.path)
-                        : false;
-                    const isDailyNote = Object.keys(attributes[document.id] ?? {})
-                        .some((name) => name.startsWith("custom-dailynote-"));
-
-                    scanned += 1;
-                    const hidden = isDailyNote || descendantContainsDailyNote;
-                    nextKnownDocuments.set(document.id, {
-                        id: document.id,
-                        path: document.path,
-                        notebookId: notebook.id,
-                        daily: isDailyNote,
-                        hidden,
-                    });
-                    if (isDailyNote) {
-                        nextDailyPaths.add(document.path);
-                    }
-
-                    if (hidden) {
-                        pathContainsDailyNote = true;
-                    }
-                    records.push({
-                        ...document,
-                        notebookId: notebook.id,
-                        notebookName: notebook.name,
-                        hidden,
-                    });
-                    publishProgress();
-                }
-                return pathContainsDailyNote;
-            }
         },
         open(key) {
             return dependencies.open(key);
@@ -437,6 +401,48 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             startTargetCounts();
         }, PAGE_COUNT_REFRESH_DEBOUNCE_MS);
     }
+}
+
+function appendPageRecords(
+    documents: ScannedNotebookDocument<PageDocument>[],
+    notebook: PageNotebook,
+    records: PageRecord[],
+    knownDocuments: Map<string, KnownDocument>,
+    dailyPaths: Set<string>,
+): boolean {
+    let pathContainsDailyNote = false;
+    for (const scanned of documents) {
+        const descendantContainsDailyNote = appendPageRecords(
+            scanned.children,
+            notebook,
+            records,
+            knownDocuments,
+            dailyPaths,
+        );
+        const daily = isDailyNote(scanned.attributes);
+        const hidden = daily || descendantContainsDailyNote;
+        const document = scanned.document;
+        knownDocuments.set(document.id, {
+            id: document.id,
+            path: document.path,
+            notebookId: notebook.id,
+            daily,
+            hidden,
+        });
+        if (daily) {
+            dailyPaths.add(document.path);
+        }
+        if (hidden) {
+            pathContainsDailyNote = true;
+        }
+        records.push({
+            ...document,
+            notebookId: notebook.id,
+            notebookName: notebook.name,
+            hidden,
+        });
+    }
+    return pathContainsDailyNote;
 }
 
 function sameEntryOrder(left: EntrySourceSection[], right: EntrySourceSection[]) {

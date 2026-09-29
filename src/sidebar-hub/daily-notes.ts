@@ -1,8 +1,13 @@
-export interface DailyNoteNotebook {
-    id: string;
-    name: string;
-    closed: boolean;
-}
+import {
+    isDailyNote,
+    scanNotebookDocuments,
+    type Notebook,
+    type NotebookDocument,
+    type NotebookDocumentAdapter,
+    type ScannedNotebookDocument,
+} from "./notebook-documents";
+
+export type DailyNoteNotebook = Notebook;
 
 export interface DailyNoteNotebookConfig {
     dailyNoteSavePath: string;
@@ -14,12 +19,7 @@ export interface DailyNotebookOption {
     dailyNoteSavePath: string;
 }
 
-export interface DailyNoteDocument {
-    id: string;
-    path: string;
-    name: string;
-    subFileCount: number;
-}
+export type DailyNoteDocument = NotebookDocument;
 
 export interface DailyNoteMonth {
     year: number;
@@ -40,10 +40,8 @@ interface DailyNotebookDependencies {
     getNotebookConfig: (notebookId: string) => Promise<DailyNoteNotebookConfig>;
 }
 
-interface DailyNoteDependencies extends DailyNotebookDependencies {
+interface DailyNoteDependencies extends DailyNotebookDependencies, NotebookDocumentAdapter {
     selectedNotebookId: () => string;
-    listDocuments: (notebookId: string, path: string) => Promise<DailyNoteDocument[]>;
-    getBlockAttrs: (ids: string[]) => Promise<Record<string, Record<string, string>>>;
     confirmCreate: (date: string) => Promise<boolean>;
     createToday: (notebookId: string) => Promise<string>;
     open: (documentId: string) => Promise<void> | void;
@@ -190,30 +188,30 @@ export function createDailyNoteNavigator(dependencies: DailyNoteDependencies): D
 
         const generation = indexGeneration;
         const nextIndex: Record<string, string> = {};
-        await scanPath("/");
+        const documents = await scanNotebookDocuments(dependencies, notebookId);
+        indexDailyNotes(documents, nextIndex);
         if (generation !== indexGeneration) {
             return loadIndex(notebookId);
         }
         indexedNotebookId = notebookId;
         dateIndex = nextIndex;
         return nextIndex;
+    }
+}
 
-        async function scanPath(path: string): Promise<void> {
-            const documents = await dependencies.listDocuments(notebookId, path);
-            const attributes = documents.length > 0
-                ? await dependencies.getBlockAttrs(documents.map((document) => document.id))
-                : {};
-            for (const document of documents) {
-                for (const attribute of Object.keys(attributes[document.id] ?? {})) {
-                    const match = /^custom-dailynote-(\d{4})(\d{2})(\d{2})$/.exec(attribute);
-                    if (match) {
-                        nextIndex[`${match[1]}-${match[2]}-${match[3]}`] ??= document.id;
-                    }
-                }
-                if (document.subFileCount > 0) {
-                    await scanPath(document.path);
+function indexDailyNotes(
+    documents: ScannedNotebookDocument[],
+    index: Record<string, string>,
+) {
+    for (const scanned of documents) {
+        if (isDailyNote(scanned.attributes)) {
+            for (const attribute of Object.keys(scanned.attributes)) {
+                const match = /^custom-dailynote-(\d{4})(\d{2})(\d{2})$/.exec(attribute);
+                if (match) {
+                    index[`${match[1]}-${match[2]}-${match[3]}`] ??= scanned.document.id;
                 }
             }
         }
+        indexDailyNotes(scanned.children, index);
     }
 }
