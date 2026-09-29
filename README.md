@@ -28,14 +28,15 @@ The calendar uses one notebook selected in the plugin settings. That notebook mu
 - **Bookmarks:** grouped by bookmark value, with collapsible groups and group counts. Rename or remove groups, manage bookmarked documents and blocks from their context menus, and drag SiYuan documents, blocks, or tabs into a group to change their bookmark assignment. Sort by name, creation time, or modification time.
 - **Tags:** displayed as a collapsible tree with exact reference counts. Virtual parent tags organize descendants but do not open a search result of their own. Sort by name or reference count.
 - **Databases:** lists attribute views, shows their total record counts, and opens the database block with a document fallback. Sort by name.
-- **Pages:** scans every open notebook for regular documents, excluding daily notes and their path ancestors. Shows document reference counts and sorts by name, creation time, or modification time.
+- **Pages:** scans every open notebook for regular documents, excluding daily notes and their path ancestors by default. Shows document reference counts, supports filtering by one or more open notebooks, and sorts by name, creation time, or modification time.
 
-Each tab has independent search, sorting, refresh, loading, empty, and error states. Searches accept multiple keywords. Counts that require extra queries are filled in asynchronously so the list can appear first.
+Each tab has independent search, sorting, refresh, loading, empty, and error states. Searches accept multiple keywords. When the search box is empty, each tab shows its total number of navigable entries; the total is hidden while searching. Counts that require extra queries are filled in asynchronously so the list can appear first.
 
 ### Preferences and accessibility
 
 - Show or hide individual tabs while always keeping at least one visible.
-- Persists the active tab, sorting choices, bookmark groups, and collapsed tag paths.
+- Choose whether the pages list excludes daily-note documents and their ancestors, and filter pages by one or more open notebooks.
+- Persists the active tab, sorting choices, page filters, bookmark groups, and collapsed tag paths.
 - Refreshes affected sources when relevant notebook or document changes are received from SiYuan.
 - Supports SiYuan's light and dark themes.
 - Provides keyboard access and assistive-technology semantics for tabs, dates, menus, tools, and entries.
@@ -64,7 +65,8 @@ Open **Settings → Marketplace → Plugins**, search for **Sidebar Hub**, insta
 1. Enable the plugin and open its grid icon in the upper-left Dock.
 2. Open the plugin settings and select the notebook used for daily notes.
 3. Use the calendar to open daily notes, or switch among the bookmark, tag, database, and page tabs.
-4. Use each tab's toolbar to search, sort, refresh, and expand or collapse supported groups. In the bookmark tab, use an entry or group context menu to manage bookmarks, or drag SiYuan documents, blocks, and tabs into a bookmark group.
+4. In the pages tab, use the filter button to include all open notebooks or select one or more notebooks. The plugin settings control whether daily-note documents and their ancestors are excluded.
+5. Use each tab's toolbar to search, sort, refresh, and expand or collapse supported groups. In the bookmark tab, use an entry or group context menu to manage bookmarks, or drag SiYuan documents, blocks, and tabs into a bookmark group.
 
 On very large workspaces, the first page scan and asynchronous counts may take a little longer. A loading indicator or `…` count means the result has not been confirmed yet; it does not mean zero.
 
