@@ -41,4 +41,11 @@ describe("侧边抽屉偏好", () => {
             collapsedTagPaths: ["标签", "标签", "", 42, "标签/子标签"],
         }).collapsedTagPaths).toEqual(["标签", "标签/子标签"]);
     });
+
+    it("默认排除日记并把页面笔记本筛选规范化为空集合", () => {
+        expect(normalizePreferences({}).excludeDailyNotes).toBe(true);
+        expect(normalizePreferences({ pageNotebookIds: ["work", "work", "", 42] }).pageNotebookIds)
+            .toEqual(["work"]);
+        expect(normalizePreferences({ excludeDailyNotes: false }).excludeDailyNotes).toBe(false);
+    });
 });

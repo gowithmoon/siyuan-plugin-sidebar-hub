@@ -305,6 +305,25 @@ describe("普通页面来源", () => {
         expect(listDocuments).not.toHaveBeenCalledWith("archive", expect.anything());
     });
 
+    it("支持关闭日记排除并按一个或多个笔记本筛选", async () => {
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue(notebooks),
+            listDocuments: vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []),
+            getBlockAttrs: vi.fn(async (ids: string[]) => Object.fromEntries(ids.map((id) => [
+                id,
+                id === "daily" ? { "custom-dailynote-20260925": "20260925" } : {},
+            ]))),
+            open: vi.fn(),
+        });
+
+        await source.query({ query: "", sort });
+        source.setFilter({ excludeDailyNotes: false, notebookIds: ["work"] });
+        expect(source.snapshot.sections[0].entries.map((entry) => entry.label)).toEqual(["2026", "2026-09", "2026-09-25", "项目说明"]);
+        source.setFilter({ excludeDailyNotes: true, notebookIds: ["life"] });
+        expect(source.snapshot.sections[0].entries.map((entry) => entry.label)).toEqual(["日记本中的普通页面", "阅读方法"]);
+        expect(source.snapshot.totalCount).toBe(2);
+    });
+
     it("扫描进度最多每 100ms 发布一次", async () => {
         vi.useFakeTimers();
         vi.setSystemTime(0);

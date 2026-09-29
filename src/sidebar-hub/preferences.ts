@@ -23,6 +23,8 @@ export interface SidebarHubPreferences {
     visibleTabs: Record<SidebarTabId, boolean>;
     collapsedBookmarkGroups: string[];
     collapsedTagPaths: string[];
+    excludeDailyNotes: boolean;
+    pageNotebookIds: string[];
 }
 
 export const SIDEBAR_TAB_IDS: readonly SidebarTabId[] = TAB_DEFINITIONS.map((tab) => tab.id);
@@ -52,6 +54,8 @@ export const DEFAULT_PREFERENCES: SidebarHubPreferences = {
     },
     collapsedBookmarkGroups: [],
     collapsedTagPaths: [],
+    excludeDailyNotes: true,
+    pageNotebookIds: [],
 };
 
 export function normalizePreferences(value: unknown): SidebarHubPreferences {
@@ -80,6 +84,9 @@ export function normalizePreferences(value: unknown): SidebarHubPreferences {
     const collapsedTagPaths = isRecord(stored) && Array.isArray(stored.collapsedTagPaths)
         ? [...new Set(stored.collapsedTagPaths.filter((value): value is string => typeof value === "string" && value.length > 0))]
         : [];
+    const pageNotebookIds = isRecord(stored) && Array.isArray(stored.pageNotebookIds)
+        ? [...new Set(stored.pageNotebookIds.filter((value): value is string => typeof value === "string" && value.length > 0))]
+        : [];
 
     return {
         activeTab,
@@ -88,6 +95,8 @@ export function normalizePreferences(value: unknown): SidebarHubPreferences {
         visibleTabs,
         collapsedBookmarkGroups,
         collapsedTagPaths,
+        excludeDailyNotes: stored.excludeDailyNotes !== false,
+        pageNotebookIds,
     };
 }
 

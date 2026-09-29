@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onDestroy } from "svelte";
+    import { onDestroy, onMount } from "svelte";
     import { Menu, showMessage, type App } from "siyuan";
 
     import type { EntrySourceEntry, EntrySourceSection, EntrySourceSort } from "./entry-source";
@@ -31,7 +31,7 @@
     import { loadTags, openTag } from "./tag-siyuan";
     import { createDatabaseSource } from "./databases";
     import { loadDatabaseCount, loadDatabases, openDatabase } from "./database-siyuan";
-    import { createPageSource, type PageSourceChange } from "./pages";
+    import { createPageSource, type PageNotebook, type PageSourceChange } from "./pages";
     import {
         confirmPageDocumentRemoval,
         loadPageBlockAttrs,
@@ -74,8 +74,12 @@
         noMatches: string;
         loadError: string;
         openError: string;
+        totalCount?: string;
         progress?: string;
         sortOptions: Record<string, string>;
+        notebookFilter?: string;
+        allNotebooks?: string;
+        selectedNotebooks?: string;
         expandAll?: string;
         collapseAll?: string;
         expandNode?: string;
@@ -121,6 +125,7 @@
         onSortChange: (tabId: SidebarTabId, sort: EntrySourceSort<SidebarHubSortField>) => void;
         onBookmarkCollapsedChange: (keys: string[]) => void;
         onTagCollapsedChange: (keys: string[]) => void;
+        onPageNotebookFilterChange?: (ids: string[]) => void;
     }
 
     interface EntrySourcePanelHandle {
@@ -136,6 +141,7 @@
         onSortChange,
         onBookmarkCollapsedChange,
         onTagCollapsedChange,
+        onPageNotebookFilterChange,
     }: Props = $props();
     const today = new Date();
     const months = Array.from({ length: 12 }, (_, index) => index);
@@ -181,6 +187,14 @@
     let tagPanel: EntrySourcePanelHandle;
     let databasePanel: EntrySourcePanelHandle;
     let pagePanel: EntrySourcePanelHandle;
+    let pageNotebooks = $state<PageNotebook[]>([]);
+    onMount(() => {
+        void loadPageNotebooks()
+            .then((notebooks) => pageNotebooks = notebooks.filter((notebook) => !notebook.closed))
+            .catch(() => {
+                pageNotebooks = [];
+            });
+    });
     const pageDocumentMenuActions = createPageDocumentMenuActions({
         isReadOnly: () => window.siyuan.config.readonly,
         labels: {
@@ -259,6 +273,63 @@
 
     function initializePreferences() {
         preferences = initialPreferences;
+    }
+
+    $effect(() => {
+        pageSource.setFilter({
+            excludeDailyNotes: preferences.excludeDailyNotes,
+            notebookIds: preferences.pageNotebookIds,
+        });
+    });
+
+    async function openPageNotebookFilter(event: MouseEvent) {
+        event.preventDefault();
+        event.stopPropagation();
+        const button = event.currentTarget as HTMLButtonElement;
+        pageNotebooks = (await loadPageNotebooks()).filter((notebook) => !notebook.closed);
+        const menu = new Menu(`sidebar-hub-page-notebooks-${instanceId}`);
+        if (menu.isOpen) {
+            return;
+        }
+        let selected = new Set(preferences.pageNotebookIds);
+        menu.addItem({
+            label: translations.pages.allNotebooks,
+            checked: selected.size === 0,
+            click: () => {
+                selected = new Set();
+                onPageNotebookFilterChange?.([]);
+                return true;
+            },
+        });
+        for (const notebook of pageNotebooks) {
+            menu.addItem({
+                label: notebook.name,
+                checked: selected.has(notebook.id),
+                click: () => {
+                    const next = new Set(selected);
+                    if (next.has(notebook.id)) {
+                        next.delete(notebook.id);
+                    } else {
+                        next.add(notebook.id);
+                    }
+                    selected = next;
+                    onPageNotebookFilterChange?.([...next]);
+                    return true;
+                },
+            });
+        }
+        const rect = button.getBoundingClientRect();
+        menu.open({ x: rect.left, y: rect.bottom, h: rect.height, w: rect.width });
+    }
+
+    function pageNotebookFilterLabel() {
+        if (preferences.pageNotebookIds.length === 0) {
+            return translations.pages.notebookFilter ?? "";
+        }
+        const names = pageNotebooks
+            .filter((notebook) => preferences.pageNotebookIds.includes(notebook.id))
+            .map((notebook) => notebook.name);
+        return `${translations.pages.selectedNotebooks?.replace("{count}", String(preferences.pageNotebookIds.length)) ?? ""}${names.length > 0 ? ` (${names.join(", ")})` : ""}`;
     }
 
     export function updatePreferences(nextPreferences: SidebarHubPreferences) {
@@ -797,6 +868,11 @@
                 active={preferences.activeTab === "pages"}
                 initialSort={preferences.sorts.pages}
                 onSortChange={(sort) => persistSort("pages", sort)}
+                filterButton={{
+                    label: pageNotebookFilterLabel(),
+                    activeCount: preferences.pageNotebookIds.length,
+                    onClick: openPageNotebookFilter,
+                }}
                 entryMenuLabel={window.siyuan.languages.more}
                 onEntryMenu={openPageDocumentMenu}
                 dragKind="document"

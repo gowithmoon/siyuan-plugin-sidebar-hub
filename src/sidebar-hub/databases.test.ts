@@ -80,6 +80,7 @@ describe("数据库导航", () => {
         const source = createDatabaseSource({ load: vi.fn().mockResolvedValue(results), count, open: vi.fn() });
 
         const snapshot = await source.query({ query: "", sort });
+        expect(snapshot.totalCount).toBe(2);
         source.setCountTargets(["20260924090000-reading"]);
 
         expect(snapshot.sections[0].entries.every((entry) => entry.count === undefined)).toBe(true);

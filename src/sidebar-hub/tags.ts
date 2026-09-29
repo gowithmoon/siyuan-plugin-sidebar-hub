@@ -31,6 +31,7 @@ export function createTagSource(dependencies: TagDependencies): EntrySource<TagS
         sortFields: TAG_SORT_FIELDS,
         load: dependencies.load,
         build: buildTagSections,
+        getTotalCount: countNavigableTags,
         open: dependencies.open,
     });
 }
@@ -96,6 +97,12 @@ function compareEntries(left: EntrySourceEntry, right: EntrySourceEntry, field: 
 
 function countOf(entry: EntrySourceEntry) {
     return entry.count ?? 0;
+}
+
+function countNavigableTags(tags: TagNode[]) {
+    return tags.reduce((total, tag) => total
+        + (tag.count > 0 ? 1 : 0)
+        + countNavigableTags(tag.children ?? []), 0);
 }
 
 function compareText(left: string, right: string) {
