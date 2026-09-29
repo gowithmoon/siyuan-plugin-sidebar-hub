@@ -292,20 +292,24 @@
             return;
         }
         let selected = new Set(preferences.pageNotebookIds);
-        menu.addItem({
+        const itemElements = new Map<string, HTMLElement>();
+        const allItem = menu.addItem({
             label: translations.pages.allNotebooks,
             checked: selected.size === 0,
-            click: () => {
+            click: (element) => {
                 selected = new Set();
                 onPageNotebookFilterChange?.([]);
+                syncNotebookMenuChecks(itemElements, selected);
+                syncNotebookMenuItem(element, true);
                 return true;
             },
         });
+        itemElements.set("", allItem);
         for (const notebook of pageNotebooks) {
-            menu.addItem({
+            const item = menu.addItem({
                 label: notebook.name,
                 checked: selected.has(notebook.id),
-                click: () => {
+                click: (element) => {
                     const next = new Set(selected);
                     if (next.has(notebook.id)) {
                         next.delete(notebook.id);
@@ -314,12 +318,33 @@
                     }
                     selected = next;
                     onPageNotebookFilterChange?.([...next]);
+                    syncNotebookMenuChecks(itemElements, selected);
+                    syncNotebookMenuItem(element, selected.has(notebook.id));
                     return true;
                 },
             });
+            itemElements.set(notebook.id, item);
         }
         const rect = button.getBoundingClientRect();
         menu.open({ x: rect.left, y: rect.bottom, h: rect.height, w: rect.width });
+    }
+
+    function syncNotebookMenuChecks(items: Map<string, HTMLElement>, selected: Set<string>) {
+        for (const [id, item] of items) {
+            syncNotebookMenuItem(item, id === "" ? selected.size === 0 : selected.has(id));
+        }
+    }
+
+    function syncNotebookMenuItem(item: HTMLElement, checked: boolean) {
+        const existing = item.querySelector<SVGElement>(".b3-menu__checked");
+        if (checked && !existing) {
+            const check = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            check.classList.add("b3-menu__checked");
+            check.innerHTML = '<use xlink:href="#iconSelect"></use>';
+            item.append(check);
+        } else if (!checked) {
+            existing?.remove();
+        }
     }
 
     function pageNotebookFilterLabel() {

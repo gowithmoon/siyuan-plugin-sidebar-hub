@@ -284,20 +284,20 @@
 
 .sidebar-hub__tools {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) repeat(3, 30px);
+    grid-template-columns: minmax(0, 1fr) repeat(3, 26px);
     flex: 0 0 auto;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     padding: 7px 8px;
     border-bottom: 1px solid var(--b3-border-color);
 }
 
 .sidebar-hub__tools--collapsible {
-    grid-template-columns: minmax(0, 1fr) repeat(4, 30px);
+    grid-template-columns: minmax(0, 1fr) repeat(4, 26px);
 }
 
 .sidebar-hub__tools--filter {
-    grid-template-columns: minmax(0, 1fr) repeat(4, 30px);
+    grid-template-columns: minmax(0, 1fr) repeat(4, 26px);
 }
 
 .sidebar-hub__search {
@@ -332,8 +332,8 @@
 }
 
 .sidebar-hub__tools > .block__icon {
-    width: 30px;
-    height: 30px;
+    width: 26px;
+    height: 26px;
     border: 0;
     background: transparent;
 }
