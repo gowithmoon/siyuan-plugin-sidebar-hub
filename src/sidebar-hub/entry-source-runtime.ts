@@ -23,6 +23,7 @@ interface EntrySourceRuntimeOptions<TField extends string> {
 export interface EntrySourceRuntime<TField extends string> {
     readonly state: EntrySourceRuntimeState<TField>;
     setActive(active: boolean): Promise<void>;
+    preload(): Promise<void>;
     setQuery(query: string): void;
     setSortField(field: TField): Promise<void>;
     toggleSortDirection(): Promise<void>;
@@ -36,6 +37,7 @@ export function createEntrySourceRuntime<TField extends string>(
 ): EntrySourceRuntime<TField> {
     const debounceMs = options.debounceMs ?? 180;
     let active = false;
+    let disposed = false;
     let searchTimer: ReturnType<typeof setTimeout> | undefined;
     let state: EntrySourceRuntimeState<TField> = {
         query: "",
@@ -45,11 +47,17 @@ export function createEntrySourceRuntime<TField extends string>(
     };
 
     function publish(next: Partial<EntrySourceRuntimeState<TField>>) {
+        if (disposed) {
+            return;
+        }
         state = { ...state, ...next };
         options.onChange?.(state);
     }
 
     async function load() {
+        if (disposed) {
+            return;
+        }
         clearTimeout(searchTimer);
         searchTimer = undefined;
         const query = state.query;
@@ -60,6 +68,9 @@ export function createEntrySourceRuntime<TField extends string>(
         );
         publish({ snapshot: options.source.snapshot, loadedQuery: undefined });
         const snapshot = await result;
+        if (disposed) {
+            return;
+        }
         publish({
             snapshot,
             loadedQuery: state.query === query && state.sort.field === sort.field && state.sort.direction === sort.direction
@@ -92,12 +103,28 @@ export function createEntrySourceRuntime<TField extends string>(
             return state;
         },
         async setActive(nextActive) {
+            if (disposed) {
+                return;
+            }
             active = nextActive;
             if (active && state.snapshot.status === "idle") {
                 await load();
             }
         },
+        async preload() {
+            if (disposed || state.snapshot.status !== "idle") {
+                return;
+            }
+            await load();
+            if (!disposed && !active && options.source.snapshot.status === "error") {
+                options.source.invalidate();
+                publish({ snapshot: options.source.snapshot, loadedQuery: undefined });
+            }
+        },
         setQuery(query) {
+            if (disposed) {
+                return;
+            }
             publish({ query, loadedQuery: undefined });
             clearTimeout(searchTimer);
             searchTimer = setTimeout(() => {
@@ -107,20 +134,32 @@ export function createEntrySourceRuntime<TField extends string>(
             }, debounceMs);
         },
         setSortField(field) {
+            if (disposed) {
+                return Promise.resolve();
+            }
             return changeSort(normalizeSort({ field, direction: state.sort.direction }));
         },
         toggleSortDirection() {
+            if (disposed) {
+                return Promise.resolve();
+            }
             return changeSort({
                 field: state.sort.field,
                 direction: state.sort.direction === "asc" ? "desc" : "asc",
             });
         },
         async refresh() {
+            if (disposed) {
+                return;
+            }
             options.source.invalidate();
             publish({ snapshot: options.source.snapshot, loadedQuery: undefined });
             await load();
         },
         async invalidate() {
+            if (disposed) {
+                return;
+            }
             if (state.snapshot.status === "error") {
                 return;
             }
@@ -131,6 +170,7 @@ export function createEntrySourceRuntime<TField extends string>(
             }
         },
         dispose() {
+            disposed = true;
             clearTimeout(searchTimer);
         },
     };

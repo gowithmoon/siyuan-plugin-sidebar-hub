@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onDestroy, onMount } from "svelte";
+    import { onDestroy, onMount, tick } from "svelte";
     import { Menu, showMessage, type App } from "siyuan";
 
     import type { EntrySourceEntry, EntrySourceSection, EntrySourceSort } from "./entry-source";
@@ -56,6 +56,7 @@
     } from "./daily-note-siyuan";
     import { notebookDocumentAdapter } from "./notebook-documents-siyuan";
     import EntrySourcePanel from "./entry-source-panel.svelte";
+    import { preloadVisibleSources } from "./source-preload";
 
     interface PanelTranslations {
         searchPlaceholder: string;
@@ -125,6 +126,7 @@
 
     interface EntrySourcePanelHandle {
         invalidate: () => Promise<void>;
+        preload: () => Promise<void>;
     }
 
     let {
@@ -182,12 +184,21 @@
     let pagePanel: EntrySourcePanelHandle;
     let pageNotebooks = $state<PageNotebook[]>([]);
     onMount(() => {
+        void preloadSources();
         void notebookDocumentAdapter.listNotebooks()
             .then((notebooks) => pageNotebooks = notebooks.filter((notebook) => !notebook.closed))
             .catch(() => {
                 pageNotebooks = [];
             });
     });
+
+    async function preloadSources() {
+        await tick();
+        await preloadVisibleSources(
+            { bookmarks: bookmarkPanel, tags: tagPanel, databases: databasePanel, pages: pagePanel },
+            TAB_DEFINITIONS.filter((tab) => preferences.visibleTabs[tab.id]).map((tab) => tab.id),
+        );
+    }
     const pageDocumentMenuActions = createPageDocumentMenuActions({
         isReadOnly: () => window.siyuan.config.readonly,
         labels: {

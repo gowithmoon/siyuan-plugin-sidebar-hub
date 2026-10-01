@@ -223,6 +223,10 @@
         return runtime.invalidate();
     }
 
+    export function preload() {
+        return runtime.preload();
+    }
+
     function changeQuery(event: Event) {
         resetVirtualScroll();
         runtime.setQuery((event.currentTarget as HTMLInputElement).value);

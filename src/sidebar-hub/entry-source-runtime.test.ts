@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createEntrySource } from "./entry-source";
-import { createEntrySourceRuntime } from "./entry-source-runtime";
+import { createEntrySourceRuntime, type EntrySourceRuntimeState } from "./entry-source-runtime";
 
 afterEach(() => vi.useRealTimers());
 
@@ -25,6 +25,75 @@ function createFixture() {
 }
 
 describe("条目来源运行期状态", () => {
+    it("非活动标签页可以预加载，激活时复用结果", async () => {
+        const fixture = createFixture();
+        const runtime = createEntrySourceRuntime({
+            source: fixture.source,
+            initialSort: { field: "name", direction: "asc" },
+        });
+
+        await runtime.preload();
+        expect(fixture.loadCount()).toBe(1);
+        expect(runtime.state.snapshot.status).toBe("ready");
+
+        await runtime.setActive(true);
+        expect(fixture.loadCount()).toBe(1);
+    });
+
+    it("预加载失败后保持可重试状态", async () => {
+        let attempts = 0;
+        const source = createEntrySource({
+            sortFields: ["name"] as const,
+            load: async () => {
+                attempts += 1;
+                if (attempts === 1) {
+                    throw new Error("暂时不可用");
+                }
+                return [{ key: "doc", label: "文档", icon: "iconFile" }];
+            },
+            build: (entries) => [{ key: "docs", entries }],
+            open: () => undefined,
+        });
+        const runtime = createEntrySourceRuntime({
+            source,
+            initialSort: { field: "name", direction: "asc" },
+        });
+
+        await runtime.preload();
+        expect(runtime.state.snapshot.status).toBe("idle");
+
+        await runtime.setActive(true);
+        expect(attempts).toBe(2);
+        expect(runtime.state.snapshot.status).toBe("ready");
+    });
+
+    it("销毁后不发布预加载结果", async () => {
+        let resolveLoad!: (entries: Array<{ key: string; label: string; icon: string }>) => void;
+        const source = createEntrySource({
+            sortFields: ["name"] as const,
+            load: () => new Promise<Array<{ key: string; label: string; icon: string }>>((resolve) => {
+                resolveLoad = resolve;
+            }),
+            build: (entries) => [{ key: "docs", entries }],
+            open: () => undefined,
+        });
+        const updates: EntrySourceRuntimeState<"name">[] = [];
+        const runtime = createEntrySourceRuntime({
+            source,
+            initialSort: { field: "name", direction: "asc" },
+            onChange: (state) => updates.push(state),
+        });
+
+        const preload = runtime.preload();
+        await Promise.resolve();
+        updates.length = 0;
+        runtime.dispose();
+        resolveLoad([{ key: "doc", label: "文档", icon: "iconFile" }]);
+        await preload;
+
+        expect(updates).toHaveLength(0);
+    });
+
     it("防抖查询并只使用最后一次输入", async () => {
         vi.useFakeTimers();
         const fixture = createFixture();
