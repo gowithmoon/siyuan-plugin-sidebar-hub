@@ -40,6 +40,60 @@ describe("条目来源运行期状态", () => {
         expect(fixture.loadCount()).toBe(1);
     });
 
+    it("预加载进行中激活标签页时复用同一个请求", async () => {
+        let loads = 0;
+        let resolveLoad!: (entries: Array<{ key: string; label: string; icon: string }>) => void;
+        const source = createEntrySource({
+            sortFields: ["name"] as const,
+            load: () => {
+                loads += 1;
+                return new Promise<Array<{ key: string; label: string; icon: string }>>((resolve) => {
+                    resolveLoad = resolve;
+                });
+            },
+            build: (entries) => [{ key: "docs", entries }],
+            open: () => undefined,
+        });
+        const runtime = createEntrySourceRuntime({
+            source,
+            initialSort: { field: "name", direction: "asc" },
+        });
+
+        const preload = runtime.preload();
+        await Promise.resolve();
+        const activation = runtime.setActive(true);
+        resolveLoad([{ key: "doc", label: "文档", icon: "iconFile" }]);
+        await Promise.all([preload, activation]);
+
+        expect(loads).toBe(1);
+        expect(runtime.state.snapshot.status).toBe("ready");
+    });
+
+    it("失效期间完成的旧预加载不会标记查询已加载", async () => {
+        let resolveLoad!: (entries: Array<{ key: string; label: string; icon: string }>) => void;
+        const source = createEntrySource({
+            sortFields: ["name"] as const,
+            load: () => new Promise<Array<{ key: string; label: string; icon: string }>>((resolve) => {
+                resolveLoad = resolve;
+            }),
+            build: (entries) => [{ key: "docs", entries }],
+            open: () => undefined,
+        });
+        const runtime = createEntrySourceRuntime({
+            source,
+            initialSort: { field: "name", direction: "asc" },
+        });
+
+        const preload = runtime.preload();
+        await Promise.resolve();
+        await runtime.invalidate();
+        resolveLoad([{ key: "doc", label: "旧文档", icon: "iconFile" }]);
+        await preload;
+
+        expect(runtime.state.snapshot.status).toBe("idle");
+        expect(runtime.state.loadedQuery).toBeUndefined();
+    });
+
     it("预加载失败后保持可重试状态", async () => {
         let attempts = 0;
         const source = createEntrySource({

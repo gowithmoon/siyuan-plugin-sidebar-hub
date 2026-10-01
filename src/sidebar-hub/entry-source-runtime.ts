@@ -73,7 +73,10 @@ export function createEntrySourceRuntime<TField extends string>(
         }
         publish({
             snapshot,
-            loadedQuery: state.query === query && state.sort.field === sort.field && state.sort.direction === sort.direction
+            loadedQuery: snapshot.status === "ready"
+                && state.query === query
+                && state.sort.field === sort.field
+                && state.sort.direction === sort.direction
                 ? query
                 : state.loadedQuery,
         });
