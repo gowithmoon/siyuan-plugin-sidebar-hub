@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createPageSource, type PageDocument, type PageNotebook } from "./pages";
+import type { EntrySourceSnapshot } from "./entry-source";
 
 const notebooks: PageNotebook[] = [
     { id: "work", name: "工作", closed: false },
@@ -148,94 +149,6 @@ describe("普通页面来源", () => {
         source.invalidate();
         await source.query({ query: "", sort });
         await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledTimes(2));
-    });
-
-    it("连续保存只在静默期后刷新一次当前页面引用数量", async () => {
-        vi.useFakeTimers();
-        try {
-            const listDocuments = vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []);
-            const getDocRefCounts = vi.fn().mockResolvedValue({ reading: 8 });
-            const source = createPageSource({
-                listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(2)),
-                listDocuments,
-                getBlockAttrs: vi.fn(async () => ({})),
-                getDocRefCounts,
-                open: vi.fn(),
-            });
-
-            await source.query({ query: "", sort });
-            source.setCountTargets(["reading"]);
-            await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledOnce());
-            getDocRefCounts.mockClear();
-            const scans = listDocuments.mock.calls.length;
-
-            expect(source.applyChange({ kind: "saved", id: "reading", updated: 50 })).toBe(true);
-            vi.advanceTimersByTime(200);
-            expect(source.applyChange({ kind: "saved", id: "reading", updated: 51 })).toBe(true);
-            vi.advanceTimersByTime(200);
-            expect(source.applyChange({ kind: "saved", id: "reading", updated: 52 })).toBe(true);
-            vi.advanceTimersByTime(100);
-            expect(source.applyChange({ kind: "saved", id: "reading", updated: 53 })).toBe(true);
-            source.setCountTargets(["journal-other"]);
-            await vi.advanceTimersByTimeAsync(499);
-            expect(getDocRefCounts).not.toHaveBeenCalled();
-            expect(listDocuments).toHaveBeenCalledTimes(scans);
-
-            await vi.advanceTimersByTimeAsync(1);
-            await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledOnce());
-            expect(getDocRefCounts).toHaveBeenCalledWith(["journal-other"]);
-            expect(listDocuments).toHaveBeenCalledTimes(scans);
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    it("未缓存页面的保存事件不触发全量扫描", async () => {
-        const listDocuments = vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []);
-        const source = createPageSource({
-            listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(2)),
-            listDocuments,
-            getBlockAttrs: vi.fn(async () => ({})),
-            open: vi.fn(),
-        });
-
-        expect(source.applyChange({ kind: "saved", id: "reading", updated: 52 })).toBe(true);
-        await source.query({ query: "", sort });
-        expect(listDocuments).toHaveBeenCalledTimes(1);
-    });
-
-    it("按修改时间排序时保存只在顺序变化后发布快照", async () => {
-        const source = createPageSource({
-            listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(2)),
-            listDocuments: vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []),
-            getBlockAttrs: vi.fn(async () => ({})),
-            open: vi.fn(),
-        });
-        const updates: string[][] = [];
-        await source.query({ query: "", sort: { field: "updated", direction: "asc" } }, (next) => {
-            updates.push(next.sections.flatMap((section) => section.entries.map((entry) => entry.key)));
-        });
-        updates.length = 0;
-
-        expect(source.applyChange({ kind: "saved", id: "reading", updated: 41 })).toBe(true);
-        expect(updates).toEqual([]);
-        expect(source.applyChange({ kind: "saved", id: "reading", updated: 10 })).toBe(true);
-        expect(updates).toEqual([["reading", "journal-other"]]);
-    });
-
-    it("按名称排序时保存不发布条目顺序未变化的快照", async () => {
-        const source = createPageSource({
-            listNotebooks: vi.fn().mockResolvedValue(notebooks.slice(2)),
-            listDocuments: vi.fn(async (notebookId: string, path: string) => trees[`${notebookId}:${path}`] ?? []),
-            getBlockAttrs: vi.fn(async () => ({})),
-            open: vi.fn(),
-        });
-        const updates: unknown[] = [];
-        await source.query({ query: "", sort }, (next) => updates.push(next));
-        updates.length = 0;
-
-        expect(source.applyChange({ kind: "saved", id: "reading", updated: 99 })).toBe(true);
-        expect(updates).toEqual([]);
     });
 
     it("旧 generation 的在途计数不能写回刷新后的快照", async () => {
@@ -394,6 +307,54 @@ describe("普通页面来源", () => {
 
         expect(open).toHaveBeenCalledWith("reading");
         expect(listDocuments).toHaveBeenCalledTimes(2);
+    });
+
+    it("手动刷新读取最新更新时间和页面引用数量", async () => {
+        let phase = 0;
+        const listDocuments = vi.fn(async () => phase === 0
+            ? [doc("reading", "/reading.sy", "阅读方法", 0, 10, 40), doc("other", "/other.sy", "其他页面", 0, 20, 20)]
+            : [doc("reading", "/reading.sy", "阅读方法", 0, 10, 10), doc("other", "/other.sy", "其他页面", 0, 20, 50)]);
+        const getDocRefCounts = vi.fn(async () => ({ reading: phase === 0 ? 1 : 7 }));
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue([{ id: "work", name: "工作", closed: false }]),
+            listDocuments,
+            getBlockAttrs: vi.fn(async () => ({})),
+            getDocRefCounts,
+            open: vi.fn(),
+        });
+        const sortByUpdated = { field: "updated", direction: "desc" } as const;
+
+        await source.query({ query: "", sort: sortByUpdated });
+        source.setCountTargets(["reading"]);
+        await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledOnce());
+        expect(source.snapshot.sections[0].entries.map((entry) => entry.key)).toEqual(["reading", "other"]);
+        expect(source.snapshot.sections[0].entries[0].count).toBe(1);
+
+        phase = 1;
+        source.invalidate();
+        await source.query({ query: "", sort: sortByUpdated });
+        await vi.waitFor(() => expect(getDocRefCounts).toHaveBeenCalledTimes(2));
+
+        expect(source.snapshot.sections[0].entries.map((entry) => entry.key)).toEqual(["other", "reading"]);
+        expect(source.snapshot.sections[0].entries[1].count).toBe(7);
+    });
+
+    it("来源销毁后不再接受新的查询或发布快照", async () => {
+        const listDocuments = vi.fn(async () => [doc("reading", "/reading.sy", "阅读方法")]);
+        const source = createPageSource({
+            listNotebooks: vi.fn().mockResolvedValue([{ id: "work", name: "工作", closed: false }]),
+            listDocuments,
+            getBlockAttrs: vi.fn(async () => ({})),
+            open: vi.fn(),
+        });
+
+        await source.query({ query: "", sort });
+        const updates: EntrySourceSnapshot[] = [];
+        source.dispose();
+        await source.query({ query: "再次查询", sort }, (snapshot) => updates.push(snapshot));
+
+        expect(listDocuments).toHaveBeenCalledOnce();
+        expect(updates).toEqual([]);
     });
 
     it("后台重扫完成前保留旧页面列表，不发布部分结果", async () => {

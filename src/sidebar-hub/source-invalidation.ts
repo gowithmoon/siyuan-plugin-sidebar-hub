@@ -49,10 +49,6 @@ export function sourceInvalidationForEvent(
     if (detail?.cmd === "refreshAttributeView") {
         return { tabs: ["databases"] };
     }
-    if (detail?.cmd === "savedoc") {
-        const pageChange = parseSavedPageChange(detail.data);
-        return pageChange ? { tabs: ["pages"], pageChange } : undefined;
-    }
     if (detail?.cmd && ALL_SOURCE_COMMANDS.has(detail.cmd)) {
         return ALL_SOURCES;
     }
@@ -103,26 +99,6 @@ function parsePageChange(cmd: string, data: unknown): PageSourceChange | undefin
         };
     }
     return undefined;
-}
-
-function parseSavedPageChange(data: unknown): PageSourceChange | undefined {
-    if (!isRecord(data) || typeof data.rootID !== "string" || data.rootID.length === 0) {
-        return undefined;
-    }
-
-    const timestamps = Array.isArray(data.sources)
-        ? data.sources
-            .filter(isRecord)
-            .map((source) => source.timestamp)
-            .filter((timestamp): timestamp is number => typeof timestamp === "number"
-                && Number.isFinite(timestamp) && timestamp > 0)
-        : [];
-    const latestTimestamp = timestamps.length > 0 ? Math.max(...timestamps) : undefined;
-    return {
-        kind: "saved",
-        id: data.rootID,
-        ...(latestTimestamp === undefined ? {} : { updated: Math.floor(latestTimestamp / 1000) }),
-    };
 }
 
 function invalidationForTransactions(data: unknown): SourceInvalidation | undefined {

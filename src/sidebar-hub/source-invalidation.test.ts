@@ -65,17 +65,7 @@ describe("思源事件触发的来源失效", () => {
                 rootID: "doc-id",
                 sources: [{ timestamp: 1727481600123 }],
             },
-        })).toEqual({
-            tabs: ["pages"],
-            pageChange: { kind: "saved", id: "doc-id", updated: 1727481600 },
-        });
-        expect(sourceInvalidationForEvent("ws-main", {
-            cmd: "savedoc",
-            data: { rootID: "doc-id", sources: [] },
-        })).toEqual({
-            tabs: ["pages"],
-            pageChange: { kind: "saved", id: "doc-id" },
-        });
+        })).toBeUndefined();
     });
 
     it("文档删除和笔记本挂载会刷新所有可能受影响的来源", () => {
@@ -134,6 +124,6 @@ describe("思源事件触发的来源失效", () => {
         expect(sourceInvalidationForEvent("ws-main", {
             cmd: "savedoc",
             data: { rootID: "doc-id", sources: [{ timestamp: 0 }, { timestamp: -1 }] },
-        })).toEqual({ tabs: ["pages"], pageChange: { kind: "saved", id: "doc-id" } });
+        })).toBeUndefined();
     });
 });

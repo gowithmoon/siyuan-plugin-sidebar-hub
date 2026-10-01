@@ -19,7 +19,6 @@ export const PAGE_SORT_FIELDS: readonly PageSortField[] = ["name", "created", "u
 
 const PAGE_SCAN_PROGRESS_INTERVAL_MS = 100;
 const PAGE_COUNT_BATCH_SIZE = 64;
-const PAGE_COUNT_REFRESH_DEBOUNCE_MS = 500;
 
 export type PageNotebook = Notebook;
 export interface PageDocument extends NotebookDocument {
@@ -28,7 +27,6 @@ export interface PageDocument extends NotebookDocument {
 }
 
 export type PageSourceChange =
-    | { kind: "saved"; id: string; updated?: number }
     | { kind: "rename"; id: string; title: string }
     | { kind: "remove"; ids: string[] }
     | {
@@ -81,8 +79,6 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
     let countTargets = new Set<string>();
     let countAttempted = new Set<string>();
     let countRequestActive = false;
-    let countGeneration = 0;
-    let countRefreshTimer: ReturnType<typeof setTimeout> | undefined;
     let disposed = false;
     let currentInput: EntrySourceQuery<PageSortField> | undefined;
     let currentUpdate: ((snapshot: EntrySourceSnapshot) => void) | undefined;
@@ -95,6 +91,9 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             return snapshot;
         },
         async query(input, onUpdate) {
+            if (disposed) {
+                return snapshot;
+            }
             const requestVersion = ++queryVersion;
             currentInput = input;
             currentUpdate = onUpdate;
@@ -184,6 +183,9 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             return dependencies.open(key);
         },
         setFilter(nextFilter) {
+            if (disposed) {
+                return;
+            }
             filter = {
                 excludeDailyNotes: nextFilter.excludeDailyNotes,
                 notebookIds: [...new Set(nextFilter.notebookIds.filter(Boolean))],
@@ -194,21 +196,6 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             if (disposed) {
                 return true;
             }
-            if (change.kind === "saved") {
-                const record = cached?.find((candidate) => candidate.id === change.id);
-                if (record && change.updated !== undefined && record.updated !== change.updated) {
-                    record.updated = change.updated;
-                    if (currentInput?.sort.field === "updated") {
-                        const nextSections = buildPageSections(cached!, currentInput, countCache, filter);
-                        if (!sameEntryOrder(snapshot.sections, nextSections)) {
-                            publishCachedSnapshot(nextSections);
-                        }
-                    }
-                }
-                scheduleCountRefresh();
-                return true;
-            }
-
             if (!cached) {
                 return true;
             }
@@ -282,9 +269,6 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
         },
         invalidate() {
             generation += 1;
-            countGeneration += 1;
-            clearTimeout(countRefreshTimer);
-            countRefreshTimer = undefined;
             queryVersion += 1;
             cached = undefined;
             knownDocuments = new Map();
@@ -301,9 +285,6 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
         dispose() {
             disposed = true;
             generation += 1;
-            countGeneration += 1;
-            clearTimeout(countRefreshTimer);
-            countRefreshTimer = undefined;
         },
         setCountTargets(keys) {
             countTargets = new Set(keys);
@@ -312,7 +293,7 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
     };
 
     function publishCachedSnapshot(nextSections?: EntrySourceSection[]) {
-        if (!cached || !currentInput) {
+        if (disposed || !cached || !currentInput) {
             return;
         }
         snapshot = {
@@ -332,7 +313,7 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
     }
 
     function startTargetCounts() {
-        if (disposed || countRefreshTimer !== undefined || !dependencies.getDocRefCounts || !cached || countRequestActive) {
+        if (disposed || !dependencies.getDocRefCounts || !cached || countRequestActive) {
             return;
         }
 
@@ -352,16 +333,16 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
         }
 
         countRequestActive = true;
-        void loadCountBatch(batch, generation, countGeneration);
+        void loadCountBatch(batch, generation);
     }
 
-    async function loadCountBatch(ids: string[], requestedGeneration: number, requestedCountGeneration: number) {
+    async function loadCountBatch(ids: string[], requestedGeneration: number) {
         if (disposed || !dependencies.getDocRefCounts) {
             return;
         }
         try {
             const counts = await dependencies.getDocRefCounts(ids);
-            if (disposed || requestedGeneration !== generation || requestedCountGeneration !== countGeneration) {
+            if (disposed || requestedGeneration !== generation) {
                 return;
             }
             for (const id of ids) {
@@ -383,23 +364,6 @@ export function createPageSource(dependencies: PageDependencies): PageSource {
             countRequestActive = false;
             startTargetCounts();
         }
-    }
-
-    function scheduleCountRefresh() {
-        if (disposed || !dependencies.getDocRefCounts || !cached) {
-            return;
-        }
-        clearTimeout(countRefreshTimer);
-        countRefreshTimer = setTimeout(() => {
-            countRefreshTimer = undefined;
-            countGeneration += 1;
-            countCache = new Map();
-            countAttempted = new Set();
-            if (cached && currentInput && snapshot.status === "ready" && countTargets.size > 0) {
-                publishCachedSnapshot();
-            }
-            startTargetCounts();
-        }, PAGE_COUNT_REFRESH_DEBOUNCE_MS);
     }
 }
 
@@ -443,12 +407,6 @@ function appendPageRecords(
         });
     }
     return pathContainsDailyNote;
-}
-
-function sameEntryOrder(left: EntrySourceSection[], right: EntrySourceSection[]) {
-    const leftKeys = left.flatMap((section) => section.entries.map((entry) => entry.key));
-    const rightKeys = right.flatMap((section) => section.entries.map((entry) => entry.key));
-    return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index]);
 }
 
 function documentIdFromPath(path: string) {
