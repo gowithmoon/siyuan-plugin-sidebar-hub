@@ -121,6 +121,46 @@ describe("条目来源运行期状态", () => {
         expect(runtime.state.snapshot.status).toBe("ready");
     });
 
+    it("预加载中激活后失败仍可通过刷新重试", async () => {
+        let attempts = 0;
+        let rejectLoad!: (error: Error) => void;
+        let resolveRetry!: (entries: Array<{ key: string; label: string; icon: string }>) => void;
+        const source = createEntrySource({
+            sortFields: ["name"] as const,
+            load: () => {
+                attempts += 1;
+                if (attempts === 1) {
+                    return new Promise<Array<{ key: string; label: string; icon: string }>>((_, reject) => {
+                        rejectLoad = reject;
+                    });
+                }
+                return new Promise<Array<{ key: string; label: string; icon: string }>>((resolve) => {
+                    resolveRetry = resolve;
+                });
+            },
+            build: (entries) => [{ key: "docs", entries }],
+            open: () => undefined,
+        });
+        const runtime = createEntrySourceRuntime({
+            source,
+            initialSort: { field: "name", direction: "asc" },
+        });
+
+        const preload = runtime.preload();
+        await Promise.resolve();
+        const activation = runtime.setActive(true);
+        rejectLoad(new Error("暂时不可用"));
+        await Promise.all([preload, activation]);
+        expect(runtime.state.snapshot.status).toBe("error");
+
+        const retry = runtime.refresh();
+        resolveRetry([{ key: "doc", label: "文档", icon: "iconFile" }]);
+        await retry;
+
+        expect(attempts).toBe(2);
+        expect(runtime.state.snapshot.status).toBe("ready");
+    });
+
     it("销毁后不发布预加载结果", async () => {
         let resolveLoad!: (entries: Array<{ key: string; label: string; icon: string }>) => void;
         const source = createEntrySource({
